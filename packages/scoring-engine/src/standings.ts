@@ -3,15 +3,21 @@ import type { IndividualTargetCompetition } from '@ddga/types';
 export interface StandingInput<TPlayer> {
   readonly player: TPlayer;
   readonly finalStanding: number;
+  /** Out of the running for this event — see `evaluateEligibility`. Defaults to false. */
+  readonly disqualified?: boolean;
 }
 
 export interface StandingEntry<TPlayer> {
   readonly player: TPlayer;
   readonly finalStanding: number;
-  /** Sequential, 1..n. Tied players take consecutive positions in roster order. */
-  readonly position: number;
-  /** True when at least one other player finished on the same number. */
+  /**
+   * Sequential, 1..n over the eligible field. null for a disqualified player, who still
+   * appears in the returned order so a leaderboard can show where they would have finished.
+   */
+  readonly position: number | null;
+  /** True when at least one other eligible player finished on the same number. */
   readonly tied: boolean;
+  readonly disqualified: boolean;
 }
 
 type StandingsConfig = Pick<IndividualTargetCompetition, 'standings'>;
@@ -40,15 +46,25 @@ export function standings<TPlayer>(
       return byStanding !== 0 ? byStanding : a.index - b.index;
     });
 
+  // Ties among disqualified players are not ties for anything, so only the eligible field
+  // counts toward the flag.
   const occurrences = new Map<number, number>();
   for (const { entry } of ordered) {
+    if (entry.disqualified === true) continue;
     occurrences.set(entry.finalStanding, (occurrences.get(entry.finalStanding) ?? 0) + 1);
   }
 
-  return ordered.map(({ entry }, rank) => ({
-    player: entry.player,
-    finalStanding: entry.finalStanding,
-    position: rank + 1,
-    tied: (occurrences.get(entry.finalStanding) ?? 0) > 1,
-  }));
+  let position = 0;
+  return ordered.map(({ entry }) => {
+    const disqualified = entry.disqualified === true;
+    if (!disqualified) position += 1;
+
+    return {
+      player: entry.player,
+      finalStanding: entry.finalStanding,
+      position: disqualified ? null : position,
+      tied: !disqualified && (occurrences.get(entry.finalStanding) ?? 0) > 1,
+      disqualified,
+    };
+  });
 }

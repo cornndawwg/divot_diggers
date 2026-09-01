@@ -46,7 +46,7 @@ export const targetSchema = z.strictObject({
    * forfeits the prize. See spec 1.3.
    */
   didNotPlay: z.strictObject({
-    ptp: z.enum(['freeze', 'adjust']),
+    ptp: z.enum(['freeze', 'score_as_zero']),
     standing: z.enum(['disqualify', 'include']),
     showOnLeaderboard: z.boolean(),
   }),

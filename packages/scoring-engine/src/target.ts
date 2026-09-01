@@ -10,13 +10,24 @@ export interface TargetState {
   readonly runningTotal: number;
 }
 
+/**
+ * A round a player missed. The target is a long-lived asset and a player who had to leave
+ * early should not have it damaged, so by default a missed round freezes it — see spec 1.3.
+ */
+export const DID_NOT_PLAY = null;
+
+/** Points pulled in a round, or `DID_NOT_PLAY` for a round the player missed. */
+export type RoundInput = number | typeof DID_NOT_PLAY;
+
 /** What one round did to a player's target and standing. */
 export interface RoundOutcome {
   /** The target played against — the value that was in force before this round. */
   readonly target: number;
-  readonly pointsPulled: number;
-  /** Points above or below the target for this round alone. */
-  readonly roundDelta: number;
+  readonly didNotPlay: boolean;
+  /** null for a missed round. A missed round is unscored, not scored as zero. */
+  readonly pointsPulled: number | null;
+  /** Points above or below the target for this round alone. null for a missed round. */
+  readonly roundDelta: number | null;
   /** The standing after this round, cumulative or per-round as the config says. */
   readonly runningTotal: number;
   /** The target after adjustment. Unchanged when adjustment is switched off. */
@@ -32,6 +43,8 @@ export interface PlayerEventResult {
   readonly runningTotalByRound: readonly number[];
   /** The standing once every round is in. */
   readonly finalStanding: number;
+  readonly roundsPlayed: number;
+  readonly roundsMissed: number;
   /** The target after the event, at full precision. Never rounded here — invariant #2. */
   readonly carryoverRaw: number;
   /** The whole number that seeds the next event, rounded as the config specifies. */
@@ -72,15 +85,29 @@ export interface ApplyRoundOptions {
  */
 export function applyRound(
   state: TargetState,
-  pointsPulled: number,
+  pointsPulled: RoundInput,
   config: Target,
   options: ApplyRoundOptions = {},
 ): RoundOutcome {
   assertFinite(state.target, 'target');
   assertFinite(state.runningTotal, 'runningTotal');
-  assertFinite(pointsPulled, 'pointsPulled');
 
-  const roundDelta = pointsPulled - state.target;
+  if (pointsPulled === DID_NOT_PLAY && config.didNotPlay.ptp === 'freeze') {
+    return {
+      target: state.target,
+      didNotPlay: true,
+      pointsPulled: null,
+      roundDelta: null,
+      runningTotal: state.runningTotal,
+      nextTarget: state.target,
+      next: state,
+    };
+  }
+
+  const scored = pointsPulled === DID_NOT_PLAY ? 0 : pointsPulled;
+  assertFinite(scored, 'pointsPulled');
+
+  const roundDelta = scored - state.target;
 
   const runningTotal =
     config.runningTotal === 'cumulative' ? state.runningTotal + roundDelta : roundDelta;
@@ -94,7 +121,8 @@ export function applyRound(
 
   return {
     target: state.target,
-    pointsPulled,
+    didNotPlay: pointsPulled === DID_NOT_PLAY,
+    pointsPulled: scored,
     roundDelta,
     runningTotal,
     nextTarget,
@@ -105,7 +133,7 @@ export function applyRound(
 /** Run a player's whole event, from their starting target through to their carry-over value. */
 export function applyRounds(
   startingTarget: number,
-  pointsPulled: readonly number[],
+  pointsPulled: readonly RoundInput[],
   config: Target,
 ): PlayerEventResult {
   if (pointsPulled.length === 0) {
@@ -131,6 +159,8 @@ export function applyRounds(
     targetsByRound: rounds.map((round) => round.target),
     runningTotalByRound: rounds.map((round) => round.runningTotal),
     finalStanding: lastRound.runningTotal,
+    roundsPlayed: rounds.filter((round) => !round.didNotPlay).length,
+    roundsMissed: rounds.filter((round) => round.didNotPlay).length,
     carryoverRaw: state.target,
     carryoverRounded: applyRounding(state.target, config.carryoverRounding),
     carriesAcrossEvents: config.carryover === 'across_events',

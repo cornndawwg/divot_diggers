@@ -9,3 +9,5 @@ export * from './rounding';
 export * from './hole-points';
 export * from './target';
 export * from './standings';
+export * from './eligibility';
+export * from './lapsed-player';
