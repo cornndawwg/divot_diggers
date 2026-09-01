@@ -1,0 +1,376 @@
+{
+  "fixtureId": "ptp-carryover",
+  "rule": "Year-end carry value rounds half_up to a whole number and becomes next tab's starting PTP.",
+  "knownException": "2021->2022 shows small upward manual adjustments by the planner.",
+  "cases": [
+    {
+      "player": "Kyle Holbrook",
+      "fromYear": 2019,
+      "toYear": 2021,
+      "rawCarryValue": 37.75,
+      "expectedStartingPtp": 38,
+      "observedStartingPtp": 38.0,
+      "agrees": true
+    },
+    {
+      "player": "Tom Griffiths",
+      "fromYear": 2019,
+      "toYear": 2021,
+      "rawCarryValue": 12.125,
+      "expectedStartingPtp": 12,
+      "observedStartingPtp": 12.0,
+      "agrees": true
+    },
+    {
+      "player": "Jack Denton",
+      "fromYear": 2019,
+      "toYear": 2021,
+      "rawCarryValue": 18.125,
+      "expectedStartingPtp": 18,
+      "observedStartingPtp": 18.0,
+      "agrees": true
+    },
+    {
+      "player": "Levi Livermont",
+      "fromYear": 2019,
+      "toYear": 2021,
+      "rawCarryValue": 26.25,
+      "expectedStartingPtp": 26,
+      "observedStartingPtp": 26.0,
+      "agrees": true
+    },
+    {
+      "player": "Elliot Griffiths",
+      "fromYear": 2019,
+      "toYear": 2021,
+      "rawCarryValue": 37.125,
+      "expectedStartingPtp": 37,
+      "observedStartingPtp": 37.0,
+      "agrees": true
+    },
+    {
+      "player": "Kenny Adkins",
+      "fromYear": 2019,
+      "toYear": 2021,
+      "rawCarryValue": 12.625,
+      "expectedStartingPtp": 13,
+      "observedStartingPtp": 13.0,
+      "agrees": true
+    },
+    {
+      "player": "Bill Danbury",
+      "fromYear": 2021,
+      "toYear": 2022,
+      "rawCarryValue": 44.75,
+      "expectedStartingPtp": 45,
+      "observedStartingPtp": 45.0,
+      "agrees": true
+    },
+    {
+      "player": "Kyle Holbrook",
+      "fromYear": 2021,
+      "toYear": 2022,
+      "rawCarryValue": 37.875,
+      "expectedStartingPtp": 38,
+      "observedStartingPtp": 38.0,
+      "agrees": true
+    },
+    {
+      "player": "Michael Chapman",
+      "fromYear": 2021,
+      "toYear": 2022,
+      "rawCarryValue": 5.0,
+      "expectedStartingPtp": 5,
+      "observedStartingPtp": 6.0,
+      "agrees": false
+    },
+    {
+      "player": "Jack Denton",
+      "fromYear": 2021,
+      "toYear": 2022,
+      "rawCarryValue": 16.625,
+      "expectedStartingPtp": 17,
+      "observedStartingPtp": 18.0,
+      "agrees": false
+    },
+    {
+      "player": "Levi Livermont",
+      "fromYear": 2021,
+      "toYear": 2022,
+      "rawCarryValue": 23.5,
+      "expectedStartingPtp": 24,
+      "observedStartingPtp": 26.0,
+      "agrees": false
+    },
+    {
+      "player": "Elliot Griffiths",
+      "fromYear": 2021,
+      "toYear": 2022,
+      "rawCarryValue": 33.25,
+      "expectedStartingPtp": 33,
+      "observedStartingPtp": 37.0,
+      "agrees": false
+    },
+    {
+      "player": "Kenny Adkins",
+      "fromYear": 2021,
+      "toYear": 2022,
+      "rawCarryValue": 11.875,
+      "expectedStartingPtp": 12,
+      "observedStartingPtp": 13.0,
+      "agrees": false
+    },
+    {
+      "player": "Justin Crumpler",
+      "fromYear": 2021,
+      "toYear": 2022,
+      "rawCarryValue": 29.0,
+      "expectedStartingPtp": 29,
+      "observedStartingPtp": 28.0,
+      "agrees": false
+    },
+    {
+      "player": "Kenny Adkins",
+      "fromYear": 2023,
+      "toYear": 2024,
+      "rawCarryValue": 19.875,
+      "expectedStartingPtp": 20,
+      "observedStartingPtp": 20.0,
+      "agrees": true
+    },
+    {
+      "player": "Elliot Griffiths",
+      "fromYear": 2023,
+      "toYear": 2024,
+      "rawCarryValue": 31.125,
+      "expectedStartingPtp": 31,
+      "observedStartingPtp": 31.0,
+      "agrees": true
+    },
+    {
+      "player": "Kyle Holbrook",
+      "fromYear": 2023,
+      "toYear": 2024,
+      "rawCarryValue": 39.75,
+      "expectedStartingPtp": 40,
+      "observedStartingPtp": 40.0,
+      "agrees": true
+    },
+    {
+      "player": "Ryan Danbury",
+      "fromYear": 2023,
+      "toYear": 2024,
+      "rawCarryValue": 28.0,
+      "expectedStartingPtp": 28,
+      "observedStartingPtp": 28.0,
+      "agrees": true
+    },
+    {
+      "player": "Peter Marshall",
+      "fromYear": 2023,
+      "toYear": 2024,
+      "rawCarryValue": 35.875,
+      "expectedStartingPtp": 36,
+      "observedStartingPtp": 36.0,
+      "agrees": true
+    },
+    {
+      "player": "Justin Crumpler",
+      "fromYear": 2023,
+      "toYear": 2024,
+      "rawCarryValue": 39.75,
+      "expectedStartingPtp": 40,
+      "observedStartingPtp": 40.0,
+      "agrees": true
+    },
+    {
+      "player": "Levi Livermont",
+      "fromYear": 2023,
+      "toYear": 2024,
+      "rawCarryValue": 24.0,
+      "expectedStartingPtp": 24,
+      "observedStartingPtp": 24.0,
+      "agrees": true
+    },
+    {
+      "player": "Michael Mascari",
+      "fromYear": 2023,
+      "toYear": 2024,
+      "rawCarryValue": 24.0,
+      "expectedStartingPtp": 24,
+      "observedStartingPtp": 24.0,
+      "agrees": true
+    },
+    {
+      "player": "Michael Chapman",
+      "fromYear": 2023,
+      "toYear": 2024,
+      "rawCarryValue": 11.0,
+      "expectedStartingPtp": 11,
+      "observedStartingPtp": 11.0,
+      "agrees": true
+    },
+    {
+      "player": "Casey Wheeler",
+      "fromYear": 2023,
+      "toYear": 2024,
+      "rawCarryValue": 33.625,
+      "expectedStartingPtp": 34,
+      "observedStartingPtp": 34.0,
+      "agrees": true
+    },
+    {
+      "player": "Jack Denton",
+      "fromYear": 2023,
+      "toYear": 2024,
+      "rawCarryValue": 17.5,
+      "expectedStartingPtp": 18,
+      "observedStartingPtp": 18.0,
+      "agrees": true
+    },
+    {
+      "player": "Wayne Chistolini",
+      "fromYear": 2023,
+      "toYear": 2024,
+      "rawCarryValue": 43.75,
+      "expectedStartingPtp": 44,
+      "observedStartingPtp": 44.0,
+      "agrees": true
+    },
+    {
+      "player": "Bill Danbury",
+      "fromYear": 2023,
+      "toYear": 2024,
+      "rawCarryValue": 51.125,
+      "expectedStartingPtp": 51,
+      "observedStartingPtp": 51.0,
+      "agrees": true
+    },
+    {
+      "player": "Case Gulden",
+      "fromYear": 2023,
+      "toYear": 2024,
+      "rawCarryValue": 34.25,
+      "expectedStartingPtp": 34,
+      "observedStartingPtp": 34.0,
+      "agrees": true
+    },
+    {
+      "player": "Jack Reynolds",
+      "fromYear": 2023,
+      "toYear": 2024,
+      "rawCarryValue": 34.125,
+      "expectedStartingPtp": 34,
+      "observedStartingPtp": 34.0,
+      "agrees": true
+    },
+    {
+      "player": "Levi Livermont",
+      "fromYear": 2025,
+      "toYear": 2026,
+      "rawCarryValue": 16.0,
+      "expectedStartingPtp": 16,
+      "observedStartingPtp": 16.0,
+      "agrees": true
+    },
+    {
+      "player": "Wayne Chistolini",
+      "fromYear": 2025,
+      "toYear": 2026,
+      "rawCarryValue": 40.75,
+      "expectedStartingPtp": 41,
+      "observedStartingPtp": 41.0,
+      "agrees": true
+    },
+    {
+      "player": "Justin Crumpler",
+      "fromYear": 2025,
+      "toYear": 2026,
+      "rawCarryValue": 46.25,
+      "expectedStartingPtp": 46,
+      "observedStartingPtp": 46.0,
+      "agrees": true
+    },
+    {
+      "player": "Kenny Adkins",
+      "fromYear": 2025,
+      "toYear": 2026,
+      "rawCarryValue": 14.375,
+      "expectedStartingPtp": 14,
+      "observedStartingPtp": 14.0,
+      "agrees": true
+    },
+    {
+      "player": "Tim Oberholtzer",
+      "fromYear": 2025,
+      "toYear": 2026,
+      "rawCarryValue": 34.5,
+      "expectedStartingPtp": 35,
+      "observedStartingPtp": 35.0,
+      "agrees": true
+    },
+    {
+      "player": "Kyle Holbrook",
+      "fromYear": 2025,
+      "toYear": 2026,
+      "rawCarryValue": 37.0,
+      "expectedStartingPtp": 37,
+      "observedStartingPtp": 37.0,
+      "agrees": true
+    },
+    {
+      "player": "Casey Wheeler",
+      "fromYear": 2025,
+      "toYear": 2026,
+      "rawCarryValue": 39.75,
+      "expectedStartingPtp": 40,
+      "observedStartingPtp": 40.0,
+      "agrees": true
+    },
+    {
+      "player": "Shon Cornwell",
+      "fromYear": 2025,
+      "toYear": 2026,
+      "rawCarryValue": 28.75,
+      "expectedStartingPtp": 29,
+      "observedStartingPtp": 29.0,
+      "agrees": true
+    },
+    {
+      "player": "Peter Marshall",
+      "fromYear": 2025,
+      "toYear": 2026,
+      "rawCarryValue": 32.5,
+      "expectedStartingPtp": 33,
+      "observedStartingPtp": 33.0,
+      "agrees": true
+    },
+    {
+      "player": "Elliot Griffiths",
+      "fromYear": 2025,
+      "toYear": 2026,
+      "rawCarryValue": 37.5,
+      "expectedStartingPtp": 38,
+      "observedStartingPtp": 38.0,
+      "agrees": true
+    },
+    {
+      "player": "Patrick Moulin",
+      "fromYear": 2025,
+      "toYear": 2026,
+      "rawCarryValue": 15.375,
+      "expectedStartingPtp": 15,
+      "observedStartingPtp": 15.0,
+      "agrees": true
+    },
+    {
+      "player": "Jason Broyles",
+      "fromYear": 2025,
+      "toYear": 2026,
+      "rawCarryValue": 30.25,
+      "expectedStartingPtp": 30,
+      "observedStartingPtp": 30.0,
+      "agrees": true
+    }
+  ]
+}

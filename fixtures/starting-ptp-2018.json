@@ -1,0 +1,16 @@
+{
+  "fixtureId": "starting-ptp-2018",
+  "note": "Template tab. Holds carried-forward starting PTPs; no scores were entered.",
+  "startingPtp": {
+    "Levi Livermont": 18.0,
+    "Jack Denton": 26.0,
+    "Elliot Griffiths": 28.0,
+    "Kyle Holbrook": 41.0,
+    "Jack Reynolds": 36.0,
+    "Mike Chapman": 24.0,
+    "Will Stafford": 24.0,
+    "Kenny Adkins": 24.0,
+    "Shane Thomas": 36.0,
+    "Chris Thomas": 36.0
+  }
+}

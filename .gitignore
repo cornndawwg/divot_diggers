@@ -1,0 +1,52 @@
+# --- Secrets. Never commit. ---
+PAT.md
+*.pat
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# --- Dependencies ---
+node_modules/
+.pnpm-store/
+
+# --- Build output ---
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# --- Expo / React Native ---
+.expo/
+.expo-shared/
+ios/
+android/
+*.jks
+*.p8
+*.p12
+*.mobileprovision
+*.orig.*
+
+# --- Test / coverage ---
+coverage/
+.vitest/
+
+# --- Local databases ---
+*.sqlite
+*.sqlite3
+*.db
+
+# --- Editors & OS ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# --- Logs ---
+*.log
+npm-debug.log*
+pnpm-debug.log*

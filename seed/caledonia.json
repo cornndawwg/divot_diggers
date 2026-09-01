@@ -1,0 +1,483 @@
+{
+  "course": {
+    "name": "Caledonia Golf & Fish Club",
+    "address": "369 Caledonia Drive, Pawleys Island, SC 29585",
+    "totalHoles": 18,
+    "source": "scorecard_import",
+    "verified": true
+  },
+  "teeSets": [
+    {
+      "name": "Pintail",
+      "gender": "mens",
+      "courseRating": 71.4,
+      "slopeRating": 144,
+      "parTotal": 70,
+      "yardageTotal": 6526,
+      "holes": [
+        {
+          "holeNumber": 1,
+          "par": 4,
+          "yardage": 376,
+          "strokeIndex": 12
+        },
+        {
+          "holeNumber": 2,
+          "par": 5,
+          "yardage": 571,
+          "strokeIndex": 8
+        },
+        {
+          "holeNumber": 3,
+          "par": 3,
+          "yardage": 187,
+          "strokeIndex": 14
+        },
+        {
+          "holeNumber": 4,
+          "par": 4,
+          "yardage": 396,
+          "strokeIndex": 6
+        },
+        {
+          "holeNumber": 5,
+          "par": 4,
+          "yardage": 419,
+          "strokeIndex": 2
+        },
+        {
+          "holeNumber": 6,
+          "par": 3,
+          "yardage": 157,
+          "strokeIndex": 16
+        },
+        {
+          "holeNumber": 7,
+          "par": 4,
+          "yardage": 399,
+          "strokeIndex": 4
+        },
+        {
+          "holeNumber": 8,
+          "par": 5,
+          "yardage": 528,
+          "strokeIndex": 10
+        },
+        {
+          "holeNumber": 9,
+          "par": 3,
+          "yardage": 118,
+          "strokeIndex": 18
+        },
+        {
+          "holeNumber": 10,
+          "par": 5,
+          "yardage": 553,
+          "strokeIndex": 15
+        },
+        {
+          "holeNumber": 11,
+          "par": 3,
+          "yardage": 167,
+          "strokeIndex": 13
+        },
+        {
+          "holeNumber": 12,
+          "par": 4,
+          "yardage": 405,
+          "strokeIndex": 9
+        },
+        {
+          "holeNumber": 13,
+          "par": 4,
+          "yardage": 398,
+          "strokeIndex": 5
+        },
+        {
+          "holeNumber": 14,
+          "par": 4,
+          "yardage": 415,
+          "strokeIndex": 7
+        },
+        {
+          "holeNumber": 15,
+          "par": 4,
+          "yardage": 462,
+          "strokeIndex": 3
+        },
+        {
+          "holeNumber": 16,
+          "par": 4,
+          "yardage": 417,
+          "strokeIndex": 1
+        },
+        {
+          "holeNumber": 17,
+          "par": 3,
+          "yardage": 175,
+          "strokeIndex": 17
+        },
+        {
+          "holeNumber": 18,
+          "par": 4,
+          "yardage": 383,
+          "strokeIndex": 11
+        }
+      ]
+    },
+    {
+      "name": "Mallard",
+      "gender": "mens",
+      "courseRating": 69.3,
+      "slopeRating": 140,
+      "parTotal": 70,
+      "yardageTotal": 6121,
+      "holes": [
+        {
+          "holeNumber": 1,
+          "par": 4,
+          "yardage": 350,
+          "strokeIndex": 12
+        },
+        {
+          "holeNumber": 2,
+          "par": 5,
+          "yardage": 553,
+          "strokeIndex": 8
+        },
+        {
+          "holeNumber": 3,
+          "par": 3,
+          "yardage": 175,
+          "strokeIndex": 14
+        },
+        {
+          "holeNumber": 4,
+          "par": 4,
+          "yardage": 357,
+          "strokeIndex": 6
+        },
+        {
+          "holeNumber": 5,
+          "par": 4,
+          "yardage": 387,
+          "strokeIndex": 2
+        },
+        {
+          "holeNumber": 6,
+          "par": 3,
+          "yardage": 135,
+          "strokeIndex": 16
+        },
+        {
+          "holeNumber": 7,
+          "par": 4,
+          "yardage": 346,
+          "strokeIndex": 4
+        },
+        {
+          "holeNumber": 8,
+          "par": 5,
+          "yardage": 512,
+          "strokeIndex": 10
+        },
+        {
+          "holeNumber": 9,
+          "par": 3,
+          "yardage": 110,
+          "strokeIndex": 18
+        },
+        {
+          "holeNumber": 10,
+          "par": 5,
+          "yardage": 531,
+          "strokeIndex": 15
+        },
+        {
+          "holeNumber": 11,
+          "par": 3,
+          "yardage": 153,
+          "strokeIndex": 13
+        },
+        {
+          "holeNumber": 12,
+          "par": 4,
+          "yardage": 395,
+          "strokeIndex": 9
+        },
+        {
+          "holeNumber": 13,
+          "par": 4,
+          "yardage": 380,
+          "strokeIndex": 5
+        },
+        {
+          "holeNumber": 14,
+          "par": 4,
+          "yardage": 363,
+          "strokeIndex": 7
+        },
+        {
+          "holeNumber": 15,
+          "par": 4,
+          "yardage": 441,
+          "strokeIndex": 3
+        },
+        {
+          "holeNumber": 16,
+          "par": 4,
+          "yardage": 400,
+          "strokeIndex": 1
+        },
+        {
+          "holeNumber": 17,
+          "par": 3,
+          "yardage": 156,
+          "strokeIndex": 17
+        },
+        {
+          "holeNumber": 18,
+          "par": 4,
+          "yardage": 377,
+          "strokeIndex": 11
+        }
+      ]
+    },
+    {
+      "name": "Wood Duck",
+      "gender": "mens",
+      "courseRating": 67.4,
+      "slopeRating": 128,
+      "parTotal": 70,
+      "yardageTotal": 5710,
+      "holes": [
+        {
+          "holeNumber": 1,
+          "par": 4,
+          "yardage": 319,
+          "strokeIndex": 12
+        },
+        {
+          "holeNumber": 2,
+          "par": 5,
+          "yardage": 516,
+          "strokeIndex": 8
+        },
+        {
+          "holeNumber": 3,
+          "par": 3,
+          "yardage": 153,
+          "strokeIndex": 14
+        },
+        {
+          "holeNumber": 4,
+          "par": 4,
+          "yardage": 322,
+          "strokeIndex": 6
+        },
+        {
+          "holeNumber": 5,
+          "par": 4,
+          "yardage": 347,
+          "strokeIndex": 2
+        },
+        {
+          "holeNumber": 6,
+          "par": 3,
+          "yardage": 120,
+          "strokeIndex": 16
+        },
+        {
+          "holeNumber": 7,
+          "par": 4,
+          "yardage": 323,
+          "strokeIndex": 4
+        },
+        {
+          "holeNumber": 8,
+          "par": 5,
+          "yardage": 477,
+          "strokeIndex": 10
+        },
+        {
+          "holeNumber": 9,
+          "par": 3,
+          "yardage": 92,
+          "strokeIndex": 18
+        },
+        {
+          "holeNumber": 10,
+          "par": 5,
+          "yardage": 518,
+          "strokeIndex": 15
+        },
+        {
+          "holeNumber": 11,
+          "par": 3,
+          "yardage": 150,
+          "strokeIndex": 13
+        },
+        {
+          "holeNumber": 12,
+          "par": 4,
+          "yardage": 384,
+          "strokeIndex": 9
+        },
+        {
+          "holeNumber": 13,
+          "par": 4,
+          "yardage": 354,
+          "strokeIndex": 5
+        },
+        {
+          "holeNumber": 14,
+          "par": 4,
+          "yardage": 343,
+          "strokeIndex": 7
+        },
+        {
+          "holeNumber": 15,
+          "par": 4,
+          "yardage": 423,
+          "strokeIndex": 3
+        },
+        {
+          "holeNumber": 16,
+          "par": 4,
+          "yardage": 375,
+          "strokeIndex": 1
+        },
+        {
+          "holeNumber": 17,
+          "par": 3,
+          "yardage": 132,
+          "strokeIndex": 17
+        },
+        {
+          "holeNumber": 18,
+          "par": 4,
+          "yardage": 362,
+          "strokeIndex": 11
+        }
+      ]
+    },
+    {
+      "name": "Redhead",
+      "gender": "mens",
+      "courseRating": 63.6,
+      "slopeRating": 119,
+      "parTotal": 70,
+      "yardageTotal": 4957,
+      "holes": [
+        {
+          "holeNumber": 1,
+          "par": 4,
+          "yardage": 254,
+          "strokeIndex": 12
+        },
+        {
+          "holeNumber": 2,
+          "par": 5,
+          "yardage": 479,
+          "strokeIndex": 8
+        },
+        {
+          "holeNumber": 3,
+          "par": 3,
+          "yardage": 126,
+          "strokeIndex": 14
+        },
+        {
+          "holeNumber": 4,
+          "par": 4,
+          "yardage": 259,
+          "strokeIndex": 6
+        },
+        {
+          "holeNumber": 5,
+          "par": 4,
+          "yardage": 328,
+          "strokeIndex": 2
+        },
+        {
+          "holeNumber": 6,
+          "par": 3,
+          "yardage": 107,
+          "strokeIndex": 16
+        },
+        {
+          "holeNumber": 7,
+          "par": 4,
+          "yardage": 283,
+          "strokeIndex": 4
+        },
+        {
+          "holeNumber": 8,
+          "par": 5,
+          "yardage": 429,
+          "strokeIndex": 10
+        },
+        {
+          "holeNumber": 9,
+          "par": 3,
+          "yardage": 80,
+          "strokeIndex": 18
+        },
+        {
+          "holeNumber": 10,
+          "par": 5,
+          "yardage": 442,
+          "strokeIndex": 15
+        },
+        {
+          "holeNumber": 11,
+          "par": 3,
+          "yardage": 135,
+          "strokeIndex": 13
+        },
+        {
+          "holeNumber": 12,
+          "par": 4,
+          "yardage": 321,
+          "strokeIndex": 9
+        },
+        {
+          "holeNumber": 13,
+          "par": 4,
+          "yardage": 291,
+          "strokeIndex": 5
+        },
+        {
+          "holeNumber": 14,
+          "par": 4,
+          "yardage": 290,
+          "strokeIndex": 7
+        },
+        {
+          "holeNumber": 15,
+          "par": 4,
+          "yardage": 404,
+          "strokeIndex": 3
+        },
+        {
+          "holeNumber": 16,
+          "par": 4,
+          "yardage": 307,
+          "strokeIndex": 1
+        },
+        {
+          "holeNumber": 17,
+          "par": 3,
+          "yardage": 121,
+          "strokeIndex": 17
+        },
+        {
+          "holeNumber": 18,
+          "par": 4,
+          "yardage": 301,
+          "strokeIndex": 11
+        }
+      ]
+    }
+  ]
+}

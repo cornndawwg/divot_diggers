@@ -1,0 +1,54 @@
+{
+  "source": "DDD_Calibration2026.xlsx",
+  "ruleset": "divot-diggers-ruleset.json",
+  "engine": {
+    "strategy": "individual_target",
+    "adjustmentFactor": 0.5,
+    "runningTotal": "cumulative",
+    "carryoverRounding": "half_up"
+  },
+  "goldenYears": [
+    2019,
+    2021,
+    2023,
+    2025,
+    2026
+  ],
+  "templateYears": [
+    2018,
+    2022,
+    2024
+  ],
+  "fixtures": [
+    {
+      "file": "dogfight-2019.json",
+      "year": 2019,
+      "rounds": 3,
+      "cases": 12
+    },
+    {
+      "file": "dogfight-2021.json",
+      "year": 2021,
+      "rounds": 3,
+      "cases": 12
+    },
+    {
+      "file": "dogfight-2023.json",
+      "year": 2023,
+      "rounds": 3,
+      "cases": 20
+    },
+    {
+      "file": "dogfight-2025.json",
+      "year": 2025,
+      "rounds": 3,
+      "cases": 19
+    },
+    {
+      "file": "dogfight-2026.json",
+      "year": 2026,
+      "rounds": 1,
+      "cases": 24
+    }
+  ]
+}

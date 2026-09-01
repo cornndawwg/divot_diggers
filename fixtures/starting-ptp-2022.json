@@ -1,0 +1,16 @@
+{
+  "fixtureId": "starting-ptp-2022",
+  "note": "Template tab. Holds carried-forward starting PTPs; no scores were entered.",
+  "startingPtp": {
+    "Bill Danbury": 45.0,
+    "Kyle Holbrook": 38.0,
+    "Michael Chapman": 6.0,
+    "Jack Denton": 18.0,
+    "Levi Livermont": 26.0,
+    "Elliot Griffiths": 37.0,
+    "Kenny Adkins": 13.0,
+    "Justin Crumpler": 28.0,
+    "Ryan Dandury": 24.0,
+    "Will Stafford": 9.0
+  }
+}

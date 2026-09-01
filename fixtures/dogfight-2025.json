@@ -1,0 +1,521 @@
+{
+  "fixtureId": "dogfight-2025",
+  "competition": "dogfight",
+  "roundsInFixture": 3,
+  "note": null,
+  "cases": [
+    {
+      "player": "Kenny Adkins",
+      "input": {
+        "startingPtp": 14.0,
+        "pointsPulled": [
+          15.0,
+          9.0,
+          17.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          14.0,
+          14.5,
+          11.75
+        ],
+        "cumulativeDeltaByRound": [
+          1.0,
+          -4.5,
+          0.75
+        ],
+        "finalStanding": 0.75,
+        "carryoverRaw": 14.375,
+        "carryoverRounded": 14,
+        "position": 4
+      }
+    },
+    {
+      "player": "Elliot Griffiths",
+      "input": {
+        "startingPtp": 40.0,
+        "pointsPulled": [
+          38.0,
+          41.0,
+          35.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          40.0,
+          39.0,
+          40.0
+        ],
+        "cumulativeDeltaByRound": [
+          -2.0,
+          0.0,
+          -5.0
+        ],
+        "finalStanding": -5.0,
+        "carryoverRaw": 37.5,
+        "carryoverRounded": 38,
+        "position": 8
+      }
+    },
+    {
+      "player": "Kyle Holbrook",
+      "input": {
+        "startingPtp": 45.0,
+        "pointsPulled": [
+          39.0,
+          44.0,
+          31.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          45.0,
+          42.0,
+          43.0
+        ],
+        "cumulativeDeltaByRound": [
+          -6.0,
+          -4.0,
+          -16.0
+        ],
+        "finalStanding": -16.0,
+        "carryoverRaw": 37.0,
+        "carryoverRounded": 37,
+        "position": 14
+      }
+    },
+    {
+      "player": "Ryan Danbury",
+      "input": {
+        "startingPtp": 34.0,
+        "pointsPulled": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          34.0,
+          17.0,
+          8.5
+        ],
+        "cumulativeDeltaByRound": [
+          -34.0,
+          -51.0,
+          -59.5
+        ],
+        "finalStanding": -59.5,
+        "carryoverRaw": 4.25,
+        "carryoverRounded": 4,
+        "position": 19
+      }
+    },
+    {
+      "player": "Peter Marshall",
+      "input": {
+        "startingPtp": 38.0,
+        "pointsPulled": [
+          36.0,
+          35.0,
+          29.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          38.0,
+          37.0,
+          36.0
+        ],
+        "cumulativeDeltaByRound": [
+          -2.0,
+          -4.0,
+          -11.0
+        ],
+        "finalStanding": -11.0,
+        "carryoverRaw": 32.5,
+        "carryoverRounded": 33,
+        "position": 12
+      }
+    },
+    {
+      "player": "Justin Crumpler",
+      "input": {
+        "startingPtp": 46.0,
+        "pointsPulled": [
+          44.0,
+          54.0,
+          43.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          46.0,
+          45.0,
+          49.5
+        ],
+        "cumulativeDeltaByRound": [
+          -2.0,
+          7.0,
+          0.5
+        ],
+        "finalStanding": 0.5,
+        "carryoverRaw": 46.25,
+        "carryoverRounded": 46,
+        "position": 5
+      }
+    },
+    {
+      "player": "Levi Livermont",
+      "input": {
+        "startingPtp": 26.0,
+        "pointsPulled": [
+          0.0,
+          17.0,
+          17.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          26.0,
+          13.0,
+          15.0
+        ],
+        "cumulativeDeltaByRound": [
+          -26.0,
+          -22.0,
+          -20.0
+        ],
+        "finalStanding": -20.0,
+        "carryoverRaw": 16.0,
+        "carryoverRounded": 16,
+        "position": 16
+      }
+    },
+    {
+      "player": "Jason Broyles",
+      "input": {
+        "startingPtp": 26.0,
+        "pointsPulled": [
+          24.0,
+          28.0,
+          34.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          26.0,
+          25.0,
+          26.5
+        ],
+        "cumulativeDeltaByRound": [
+          -2.0,
+          1.0,
+          8.5
+        ],
+        "finalStanding": 8.5,
+        "carryoverRaw": 30.25,
+        "carryoverRounded": 30,
+        "position": 3
+      }
+    },
+    {
+      "player": "Shon Cornwell",
+      "input": {
+        "startingPtp": 40.0,
+        "pointsPulled": [
+          26.0,
+          26.0,
+          28.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          40.0,
+          33.0,
+          29.5
+        ],
+        "cumulativeDeltaByRound": [
+          -14.0,
+          -21.0,
+          -22.5
+        ],
+        "finalStanding": -22.5,
+        "carryoverRaw": 28.75,
+        "carryoverRounded": 29,
+        "position": 17
+      }
+    },
+    {
+      "player": "Scott Stewart",
+      "input": {
+        "startingPtp": 24.0,
+        "pointsPulled": [
+          15.0,
+          20.0,
+          11.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          24.0,
+          19.5,
+          19.75
+        ],
+        "cumulativeDeltaByRound": [
+          -9.0,
+          -8.5,
+          -17.25
+        ],
+        "finalStanding": -17.25,
+        "carryoverRaw": 15.375,
+        "carryoverRounded": 15,
+        "position": 15
+      }
+    },
+    {
+      "player": "Cajen Rhodes",
+      "input": {
+        "startingPtp": 44.0,
+        "pointsPulled": [
+          39.0,
+          44.0,
+          37.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          44.0,
+          41.5,
+          42.75
+        ],
+        "cumulativeDeltaByRound": [
+          -5.0,
+          -2.5,
+          -8.25
+        ],
+        "finalStanding": -8.25,
+        "carryoverRaw": 39.875,
+        "carryoverRounded": 40,
+        "position": 10
+      }
+    },
+    {
+      "player": "Michael Chapman",
+      "input": {
+        "startingPtp": 14.0,
+        "pointsPulled": [
+          9.0,
+          8.0,
+          7.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          14.0,
+          11.5,
+          9.75
+        ],
+        "cumulativeDeltaByRound": [
+          -5.0,
+          -8.5,
+          -11.25
+        ],
+        "finalStanding": -11.25,
+        "carryoverRaw": 8.375,
+        "carryoverRounded": 8,
+        "position": 13
+      }
+    },
+    {
+      "player": "Randall Wilson",
+      "input": {
+        "startingPtp": 34.0,
+        "pointsPulled": [
+          35.0,
+          26.0,
+          0.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          34.0,
+          34.5,
+          30.25
+        ],
+        "cumulativeDeltaByRound": [
+          1.0,
+          -7.5,
+          -37.75
+        ],
+        "finalStanding": -37.75,
+        "carryoverRaw": 15.125,
+        "carryoverRounded": 15,
+        "position": 18
+      }
+    },
+    {
+      "player": "Casey Wheeler",
+      "input": {
+        "startingPtp": 27.0,
+        "pointsPulled": [
+          31.0,
+          42.0,
+          44.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          27.0,
+          29.0,
+          35.5
+        ],
+        "cumulativeDeltaByRound": [
+          4.0,
+          17.0,
+          25.5
+        ],
+        "finalStanding": 25.5,
+        "carryoverRaw": 39.75,
+        "carryoverRounded": 40,
+        "position": 1
+      }
+    },
+    {
+      "player": "Patrick Moulin",
+      "input": {
+        "startingPtp": 16.0,
+        "pointsPulled": [
+          11.0,
+          14.0,
+          17.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          16.0,
+          13.5,
+          13.75
+        ],
+        "cumulativeDeltaByRound": [
+          -5.0,
+          -4.5,
+          -1.25
+        ],
+        "finalStanding": -1.25,
+        "carryoverRaw": 15.375,
+        "carryoverRounded": 15,
+        "position": 6
+      }
+    },
+    {
+      "player": "Buddy Holley",
+      "input": {
+        "startingPtp": 46.0,
+        "pointsPulled": [
+          40.0,
+          43.0,
+          41.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          46.0,
+          43.0,
+          43.0
+        ],
+        "cumulativeDeltaByRound": [
+          -6.0,
+          -6.0,
+          -8.0
+        ],
+        "finalStanding": -8.0,
+        "carryoverRaw": 42.0,
+        "carryoverRounded": 42,
+        "position": 9
+      }
+    },
+    {
+      "player": "Wayne Chistolini",
+      "input": {
+        "startingPtp": 29.0,
+        "pointsPulled": [
+          39.0,
+          45.0,
+          42.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          29.0,
+          34.0,
+          39.5
+        ],
+        "cumulativeDeltaByRound": [
+          10.0,
+          21.0,
+          23.5
+        ],
+        "finalStanding": 23.5,
+        "carryoverRaw": 40.75,
+        "carryoverRounded": 41,
+        "position": 2
+      }
+    },
+    {
+      "player": "Bill Danbury",
+      "input": {
+        "startingPtp": 48.0,
+        "pointsPulled": [
+          43.0,
+          43.0,
+          48.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          48.0,
+          45.5,
+          44.25
+        ],
+        "cumulativeDeltaByRound": [
+          -5.0,
+          -7.5,
+          -3.75
+        ],
+        "finalStanding": -3.75,
+        "carryoverRaw": 46.125,
+        "carryoverRounded": 46,
+        "position": 7
+      }
+    },
+    {
+      "player": "Tim Oberholtzer",
+      "input": {
+        "startingPtp": 39.0,
+        "pointsPulled": [
+          43.0,
+          29.0,
+          34.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          39.0,
+          41.0,
+          35.0
+        ],
+        "cumulativeDeltaByRound": [
+          4.0,
+          -8.0,
+          -9.0
+        ],
+        "finalStanding": -9.0,
+        "carryoverRaw": 34.5,
+        "carryoverRounded": 35,
+        "position": 11
+      }
+    }
+  ]
+}

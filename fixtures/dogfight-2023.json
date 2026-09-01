@@ -1,0 +1,548 @@
+{
+  "fixtureId": "dogfight-2023",
+  "competition": "dogfight",
+  "roundsInFixture": 3,
+  "note": null,
+  "cases": [
+    {
+      "player": "Kenny Adkins",
+      "input": {
+        "startingPtp": 16.0,
+        "pointsPulled": [
+          19.0,
+          14.0,
+          24.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          16.0,
+          17.5,
+          15.75
+        ],
+        "cumulativeDeltaByRound": [
+          3.0,
+          -0.5,
+          7.75
+        ],
+        "finalStanding": 7.75,
+        "carryoverRaw": 19.875,
+        "carryoverRounded": 20,
+        "position": 4
+      }
+    },
+    {
+      "player": "Elliot Griffiths",
+      "input": {
+        "startingPtp": 33.0,
+        "pointsPulled": [
+          40.0,
+          24.0,
+          32.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          33.0,
+          36.5,
+          30.25
+        ],
+        "cumulativeDeltaByRound": [
+          7.0,
+          -5.5,
+          -3.75
+        ],
+        "finalStanding": -3.75,
+        "carryoverRaw": 31.125,
+        "carryoverRounded": 31,
+        "position": 16
+      }
+    },
+    {
+      "player": "Kyle Holbrook",
+      "input": {
+        "startingPtp": 37.0,
+        "pointsPulled": [
+          35.0,
+          35.0,
+          44.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          37.0,
+          36.0,
+          35.5
+        ],
+        "cumulativeDeltaByRound": [
+          -2.0,
+          -3.0,
+          5.5
+        ],
+        "finalStanding": 5.5,
+        "carryoverRaw": 39.75,
+        "carryoverRounded": 40,
+        "position": 9
+      }
+    },
+    {
+      "player": "Ryan Danbury",
+      "input": {
+        "startingPtp": 28.0,
+        "pointsPulled": [
+          28.0,
+          28.0,
+          28.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          28.0,
+          28.0,
+          28.0
+        ],
+        "cumulativeDeltaByRound": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "finalStanding": 0.0,
+        "carryoverRaw": 28.0,
+        "carryoverRounded": 28,
+        "position": 15
+      }
+    },
+    {
+      "player": "Peter Marshall",
+      "input": {
+        "startingPtp": 39.0,
+        "pointsPulled": [
+          26.0,
+          29.0,
+          41.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          39.0,
+          32.5,
+          30.75
+        ],
+        "cumulativeDeltaByRound": [
+          -13.0,
+          -16.5,
+          -6.25
+        ],
+        "finalStanding": -6.25,
+        "carryoverRaw": 35.875,
+        "carryoverRounded": 36,
+        "position": 18
+      }
+    },
+    {
+      "player": "Justin Crumpler",
+      "input": {
+        "startingPtp": 31.0,
+        "pointsPulled": [
+          29.0,
+          45.0,
+          42.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          31.0,
+          30.0,
+          37.5
+        ],
+        "cumulativeDeltaByRound": [
+          -2.0,
+          13.0,
+          17.5
+        ],
+        "finalStanding": 17.5,
+        "carryoverRaw": 39.75,
+        "carryoverRounded": 40,
+        "position": 1
+      }
+    },
+    {
+      "player": "Levi Livermont",
+      "input": {
+        "startingPtp": 21.0,
+        "pointsPulled": [
+          19.0,
+          20.0,
+          28.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          21.0,
+          20.0,
+          20.0
+        ],
+        "cumulativeDeltaByRound": [
+          -2.0,
+          -2.0,
+          6.0
+        ],
+        "finalStanding": 6.0,
+        "carryoverRaw": 24.0,
+        "carryoverRounded": 24,
+        "position": 5
+      }
+    },
+    {
+      "player": "Jake Bolden",
+      "input": {
+        "startingPtp": 32.0,
+        "pointsPulled": [
+          31.0,
+          33.0,
+          28.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          32.0,
+          31.5,
+          32.25
+        ],
+        "cumulativeDeltaByRound": [
+          -1.0,
+          0.5,
+          -3.75
+        ],
+        "finalStanding": -3.75,
+        "carryoverRaw": 30.125,
+        "carryoverRounded": 30,
+        "position": 17
+      }
+    },
+    {
+      "player": "Michael Mascari",
+      "input": {
+        "startingPtp": 16.0,
+        "pointsPulled": [
+          18.0,
+          23.0,
+          28.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          16.0,
+          17.0,
+          20.0
+        ],
+        "cumulativeDeltaByRound": [
+          2.0,
+          8.0,
+          16.0
+        ],
+        "finalStanding": 16.0,
+        "carryoverRaw": 24.0,
+        "carryoverRounded": 24,
+        "position": 2
+      }
+    },
+    {
+      "player": "Daniel Neeley",
+      "input": {
+        "startingPtp": 37.0,
+        "pointsPulled": [
+          28.0,
+          28.0,
+          32.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          37.0,
+          32.5,
+          30.25
+        ],
+        "cumulativeDeltaByRound": [
+          -9.0,
+          -13.5,
+          -11.75
+        ],
+        "finalStanding": -11.75,
+        "carryoverRaw": 31.125,
+        "carryoverRounded": 31,
+        "position": 19
+      }
+    },
+    {
+      "player": "Ben Bolden",
+      "input": {
+        "startingPtp": 27.0,
+        "pointsPulled": [
+          26.0,
+          29.0,
+          31.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          27.0,
+          26.5,
+          27.75
+        ],
+        "cumulativeDeltaByRound": [
+          -1.0,
+          1.5,
+          4.75
+        ],
+        "finalStanding": 4.75,
+        "carryoverRaw": 29.375,
+        "carryoverRounded": 29,
+        "position": 10
+      }
+    },
+    {
+      "player": "Michael Chapman",
+      "input": {
+        "startingPtp": 8.0,
+        "pointsPulled": [
+          12.0,
+          2.0,
+          16.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          8.0,
+          10.0,
+          6.0
+        ],
+        "cumulativeDeltaByRound": [
+          4.0,
+          -4.0,
+          6.0
+        ],
+        "finalStanding": 6.0,
+        "carryoverRaw": 11.0,
+        "carryoverRounded": 11,
+        "position": 6
+      }
+    },
+    {
+      "player": "Gary Ellis",
+      "input": {
+        "startingPtp": 35.0,
+        "pointsPulled": [
+          35.0,
+          41.0,
+          38.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          35.0,
+          35.0,
+          38.0
+        ],
+        "cumulativeDeltaByRound": [
+          0.0,
+          6.0,
+          6.0
+        ],
+        "finalStanding": 6.0,
+        "carryoverRaw": 38.0,
+        "carryoverRounded": 38,
+        "position": 7
+      }
+    },
+    {
+      "player": "Casey Wheeler",
+      "input": {
+        "startingPtp": 33.0,
+        "pointsPulled": [
+          28.0,
+          28.0,
+          38.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          33.0,
+          30.5,
+          29.25
+        ],
+        "cumulativeDeltaByRound": [
+          -5.0,
+          -7.5,
+          1.25
+        ],
+        "finalStanding": 1.25,
+        "carryoverRaw": 33.625,
+        "carryoverRounded": 34,
+        "position": 14
+      }
+    },
+    {
+      "player": "Mike Sinkule",
+      "input": {
+        "startingPtp": 38.0,
+        "pointsPulled": [
+          24.0,
+          37.0,
+          48.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          38.0,
+          31.0,
+          34.0
+        ],
+        "cumulativeDeltaByRound": [
+          -14.0,
+          -8.0,
+          6.0
+        ],
+        "finalStanding": 6.0,
+        "carryoverRaw": 41.0,
+        "carryoverRounded": 41,
+        "position": 8
+      }
+    },
+    {
+      "player": "Jack Denton",
+      "input": {
+        "startingPtp": 16.0,
+        "pointsPulled": [
+          16.0,
+          14.0,
+          20.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          16.0,
+          16.0,
+          15.0
+        ],
+        "cumulativeDeltaByRound": [
+          0.0,
+          -2.0,
+          3.0
+        ],
+        "finalStanding": 3.0,
+        "carryoverRaw": 17.5,
+        "carryoverRounded": 18,
+        "position": 13
+      }
+    },
+    {
+      "player": "Wayne Chistolini",
+      "input": {
+        "startingPtp": 42.0,
+        "pointsPulled": [
+          42.0,
+          43.0,
+          45.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          42.0,
+          42.0,
+          42.5
+        ],
+        "cumulativeDeltaByRound": [
+          0.0,
+          1.0,
+          3.5
+        ],
+        "finalStanding": 3.5,
+        "carryoverRaw": 43.75,
+        "carryoverRounded": 44,
+        "position": 12
+      }
+    },
+    {
+      "player": "Bill Danbury",
+      "input": {
+        "startingPtp": 46.0,
+        "pointsPulled": [
+          43.0,
+          46.0,
+          57.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          46.0,
+          44.5,
+          45.25
+        ],
+        "cumulativeDeltaByRound": [
+          -3.0,
+          -1.5,
+          10.25
+        ],
+        "finalStanding": 10.25,
+        "carryoverRaw": 51.125,
+        "carryoverRounded": 51,
+        "position": 3
+      }
+    },
+    {
+      "player": "Case Gulden",
+      "input": {
+        "startingPtp": 32.0,
+        "pointsPulled": [
+          34.0,
+          32.0,
+          36.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          32.0,
+          33.0,
+          32.5
+        ],
+        "cumulativeDeltaByRound": [
+          2.0,
+          1.0,
+          4.5
+        ],
+        "finalStanding": 4.5,
+        "carryoverRaw": 34.25,
+        "carryoverRounded": 34,
+        "position": 11
+      }
+    },
+    {
+      "player": "Jack Reynolds",
+      "input": {
+        "startingPtp": 41.0,
+        "pointsPulled": [
+          24.0,
+          28.0,
+          38.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          41.0,
+          32.5,
+          30.25
+        ],
+        "cumulativeDeltaByRound": [
+          -17.0,
+          -21.5,
+          -13.75
+        ],
+        "finalStanding": -13.75,
+        "carryoverRaw": 34.125,
+        "carryoverRounded": 34,
+        "position": 20
+      }
+    }
+  ]
+}

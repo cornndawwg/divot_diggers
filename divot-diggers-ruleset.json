@@ -1,0 +1,149 @@
+{
+  "rulesetId": "ddd-base",
+  "version": 1,
+  "name": "Divot Diggers Dogfight & Winona Ryder Cup",
+  "orgId": "divot-diggers",
+  "engineVersionMin": "1.0.0",
+
+  "scoringProfiles": [
+    {
+      "id": "ddd-points",
+      "name": "Divot Diggers Points",
+      "basis": "gross",
+      "table": [
+        { "relativeToPar": -3, "label": "Albatross",    "points": 16 },
+        { "relativeToPar": -2, "label": "Eagle",        "points": 8 },
+        { "relativeToPar": -1, "label": "Birdie",       "points": 5 },
+        { "relativeToPar": 0,  "label": "Par",          "points": 3 },
+        { "relativeToPar": 1,  "label": "Bogey",        "points": 2 },
+        { "relativeToPar": 2,  "label": "Double Bogey", "points": 1 }
+      ],
+      "betterThanTable": { "mode": "clamp" },
+      "worseThanTable": { "mode": "value", "points": 0 },
+      "specialRules": [
+        {
+          "id": "hole_in_one",
+          "label": "Hole in One",
+          "enabled": false,
+          "trigger": { "strokes": 1 },
+          "effect": { "mode": "override", "points": 20 },
+          "plannerEditable": true
+        }
+      ],
+      "pickup": {
+        "policy": "cap_at_first_zero",
+        "fixedRelativeToPar": null,
+        "recordCappedStrokes": true
+      }
+    }
+  ],
+
+  "competitions": [
+    {
+      "id": "dogfight",
+      "name": "Dogfight",
+      "type": "individual_target",
+      "scoringProfile": "ddd-points",
+      "rounds": ["thu-am", "fri-am", "sat-am"],
+
+      "target": {
+        "label": "Points to Pull",
+        "abbreviation": "PTP",
+        "initialValue": {
+          "method": "constant_minus_handicap",
+          "constant": 54,
+          "handicapSource": "handicap_index",
+          "rounding": "half_up"
+        },
+        "carryover": "across_events",
+        "carryoverRounding": "half_up",
+        "adjustmentFactor": 0.5,
+        "adjustBetweenRounds": true,
+        "adjustAtEventEnd": true,
+        "runningTotal": "cumulative",
+        "precision": "full",
+        "displayPrecision": 1,
+        "prorateByHoles": true,
+        "didNotPlay": {
+          "ptp": "freeze",
+          "standing": "disqualify",
+          "showOnLeaderboard": true
+        },
+        "lapsedPlayer": {
+          "method": "carry_with_handicap_delta",
+          "requirePlannerConfirmation": true,
+          "maxAdjustment": null,
+          "plannerMayEditSuggestion": true
+        }
+      },
+
+      "eligibility": { "minimumRoundsCompleted": 3 },
+
+      "standings": { "sortBy": "running_total", "direction": "desc" },
+      "tiebreak": {
+        "chain": [],
+        "fallback": { "mode": "planner_resolved", "label": "Putting contest" }
+      },
+
+      "payouts": [
+        { "place": 1, "amount": 380 },
+        { "place": 2, "amount": 260 },
+        { "place": 3, "amount": 80 }
+      ]
+    },
+
+    {
+      "id": "wrc",
+      "name": "Winona Ryder Cup",
+      "type": "team_match_play",
+      "holeComparison": "gross_strokes",
+      "handicapAllowance": 0.0,
+
+      "matchPlay": {
+        "concessions": {
+          "hole": { "byOpponent": true, "bySelf": true },
+          "stroke": { "byOpponent": true },
+          "recordStrokes": false
+        },
+        "pickupPolicy": "not_applicable",
+        "closeOutWhenDecided": true,
+        "statusFormat": "holes_up_thru"
+      },
+
+      "teams": [
+        { "id": "a", "name": "Inglorious Bogies" },
+        { "id": "b", "name": "Bad Birdies" }
+      ],
+      "rosterSelection": {
+        "method": "captain_draft",
+        "order": "snake",
+        "pickTimerSeconds": null
+      },
+
+      "pointsPerMatch": { "win": 1, "halved": 0.5, "loss": 0 },
+      "sessions": [
+        { "roundId": "thu-pm", "format": "scramble",       "playersPerSide": 2, "matches": 6,  "holes": 9 },
+        { "roundId": "fri-pm", "format": "alternate_shot", "playersPerSide": 2, "matches": 6,  "holes": 9 },
+        { "roundId": "sat-pm", "format": "singles",        "playersPerSide": 1, "matches": 12, "holes": 9 }
+      ],
+
+      "totalPointsAvailable": 24,
+      "clinchThreshold": 13,
+      "matchupMethod": "captain_pick",
+      "matchupLock": "night_before",
+      "tiebreak": {
+        "chain": [],
+        "fallback": { "mode": "planner_resolved", "label": "Captains' sudden-death putting contest" }
+      },
+
+      "payouts": [{ "place": 1, "amount": 720, "split": "per_team" }]
+    }
+  ],
+
+  "validation": {
+    "assertSessionMatchesSumToTotal": true,
+    "assertClinchExceedsHalfOfTotal": true,
+    "assertAllReferencedRoundsExist": true,
+    "assertAllReferencedProfilesExist": true
+  }
+}

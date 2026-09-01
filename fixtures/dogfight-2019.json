@@ -1,0 +1,332 @@
+{
+  "fixtureId": "dogfight-2019",
+  "competition": "dogfight",
+  "roundsInFixture": 3,
+  "note": null,
+  "cases": [
+    {
+      "player": "Levi Livermont",
+      "input": {
+        "startingPtp": 20.0,
+        "pointsPulled": [
+          24.0,
+          25.0,
+          29.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          20.0,
+          22.0,
+          23.5
+        ],
+        "cumulativeDeltaByRound": [
+          4.0,
+          7.0,
+          12.5
+        ],
+        "finalStanding": 12.5,
+        "carryoverRaw": 26.25,
+        "carryoverRounded": 26,
+        "position": 1
+      }
+    },
+    {
+      "player": "Elliot Griffiths",
+      "input": {
+        "startingPtp": 34.0,
+        "pointsPulled": [
+          35.0,
+          44.0,
+          35.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          34.0,
+          34.5,
+          39.25
+        ],
+        "cumulativeDeltaByRound": [
+          1.0,
+          10.5,
+          6.25
+        ],
+        "finalStanding": 6.25,
+        "carryoverRaw": 37.125,
+        "carryoverRounded": 37,
+        "position": 2
+      }
+    },
+    {
+      "player": "Shane Thomas",
+      "input": {
+        "startingPtp": 39.0,
+        "pointsPulled": [
+          35.0,
+          39.0,
+          45.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          39.0,
+          37.0,
+          38.0
+        ],
+        "cumulativeDeltaByRound": [
+          -4.0,
+          -2.0,
+          5.0
+        ],
+        "finalStanding": 5.0,
+        "carryoverRaw": 41.5,
+        "carryoverRounded": 42,
+        "position": 3
+      }
+    },
+    {
+      "player": "Chris Thomas",
+      "input": {
+        "startingPtp": 40.0,
+        "pointsPulled": [
+          31.0,
+          33.0,
+          35.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          40.0,
+          35.5,
+          34.25
+        ],
+        "cumulativeDeltaByRound": [
+          -9.0,
+          -11.5,
+          -10.75
+        ],
+        "finalStanding": -10.75,
+        "carryoverRaw": 34.625,
+        "carryoverRounded": 35,
+        "position": 9
+      }
+    },
+    {
+      "player": "Jack Denton",
+      "input": {
+        "startingPtp": 22.0,
+        "pointsPulled": [
+          17.0,
+          23.0,
+          15.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          22.0,
+          19.5,
+          21.25
+        ],
+        "cumulativeDeltaByRound": [
+          -5.0,
+          -1.5,
+          -7.75
+        ],
+        "finalStanding": -7.75,
+        "carryoverRaw": 18.125,
+        "carryoverRounded": 18,
+        "position": 8
+      }
+    },
+    {
+      "player": "Mike Chapman",
+      "input": {
+        "startingPtp": 10.0,
+        "pointsPulled": [
+          7.0,
+          5.0,
+          6.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          10.0,
+          8.5,
+          6.75
+        ],
+        "cumulativeDeltaByRound": [
+          -3.0,
+          -6.5,
+          -7.25
+        ],
+        "finalStanding": -7.25,
+        "carryoverRaw": 6.375,
+        "carryoverRounded": 6,
+        "position": 7
+      }
+    },
+    {
+      "player": "Michael Mascari",
+      "input": {
+        "startingPtp": 28.0,
+        "pointsPulled": [
+          16.0,
+          8.0,
+          14.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          28.0,
+          22.0,
+          15.0
+        ],
+        "cumulativeDeltaByRound": [
+          -12.0,
+          -26.0,
+          -27.0
+        ],
+        "finalStanding": -27.0,
+        "carryoverRaw": 14.5,
+        "carryoverRounded": 15,
+        "position": 12
+      }
+    },
+    {
+      "player": "Case Gulden",
+      "input": {
+        "startingPtp": 34.0,
+        "pointsPulled": [
+          36.0,
+          40.0,
+          33.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          34.0,
+          35.0,
+          37.5
+        ],
+        "cumulativeDeltaByRound": [
+          2.0,
+          7.0,
+          2.5
+        ],
+        "finalStanding": 2.5,
+        "carryoverRaw": 35.25,
+        "carryoverRounded": 35,
+        "position": 5
+      }
+    },
+    {
+      "player": "Kyle Holbrook",
+      "input": {
+        "startingPtp": 39.0,
+        "pointsPulled": [
+          33.0,
+          39.0,
+          38.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          39.0,
+          36.0,
+          37.5
+        ],
+        "cumulativeDeltaByRound": [
+          -6.0,
+          -3.0,
+          -2.5
+        ],
+        "finalStanding": -2.5,
+        "carryoverRaw": 37.75,
+        "carryoverRounded": 38,
+        "position": 6
+      }
+    },
+    {
+      "player": "Kenny Adkins",
+      "input": {
+        "startingPtp": 11.0,
+        "pointsPulled": [
+          10.0,
+          14.0,
+          13.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          11.0,
+          10.5,
+          12.25
+        ],
+        "cumulativeDeltaByRound": [
+          -1.0,
+          2.5,
+          3.25
+        ],
+        "finalStanding": 3.25,
+        "carryoverRaw": 12.625,
+        "carryoverRounded": 13,
+        "position": 4
+      }
+    },
+    {
+      "player": "Peter Marshal",
+      "input": {
+        "startingPtp": 39.0,
+        "pointsPulled": [
+          30.0,
+          28.0,
+          27.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          39.0,
+          34.5,
+          31.25
+        ],
+        "cumulativeDeltaByRound": [
+          -9.0,
+          -15.5,
+          -19.75
+        ],
+        "finalStanding": -19.75,
+        "carryoverRaw": 29.125,
+        "carryoverRounded": 29,
+        "position": 10
+      }
+    },
+    {
+      "player": "Tom Griffiths",
+      "input": {
+        "startingPtp": 24.0,
+        "pointsPulled": [
+          7.0,
+          5.0,
+          14.0
+        ]
+      },
+      "expected": {
+        "targetsByRound": [
+          24.0,
+          15.5,
+          10.25
+        ],
+        "cumulativeDeltaByRound": [
+          -17.0,
+          -27.5,
+          -23.75
+        ],
+        "finalStanding": -23.75,
+        "carryoverRaw": 12.125,
+        "carryoverRounded": 12,
+        "position": 11
+      }
+    }
+  ]
+}

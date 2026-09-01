@@ -1,0 +1,26 @@
+{
+  "fixtureId": "starting-ptp-2024",
+  "note": "Template tab. Holds carried-forward starting PTPs; no scores were entered.",
+  "startingPtp": {
+    "Kenny Adkins": 20.0,
+    "Elliot Griffiths": 31.0,
+    "Kyle Holbrook": 40.0,
+    "Ryan Danbury": 28.0,
+    "Peter Marshall": 36.0,
+    "Justin Crumpler": 40.0,
+    "Levi Livermont": 24.0,
+    "Jason Broyles": 0.0,
+    "Michael Mascari": 24.0,
+    "Dave Walker": 0.0,
+    "Michael Carnell": 0.0,
+    "Michael Chapman": 11.0,
+    "Will Stafford": 0.0,
+    "Casey Wheeler": 34.0,
+    "Patrick Moulin": 12.0,
+    "Jack Denton": 18.0,
+    "Wayne Chistolini": 44.0,
+    "Bill Danbury": 51.0,
+    "Case Gulden": 34.0,
+    "Jack Reynolds": 34.0
+  }
+}
