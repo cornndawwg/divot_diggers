@@ -79,6 +79,25 @@ export const scoringProfileSchema = scoringProfileShape.superRefine((profile, ct
     seenRelativeToPar.add(row.relativeToPar);
   });
 
+  // A gap in the table would leave some score with no defined value, and the engine would have
+  // to invent one. Catch it at authoring time instead.
+  const relativeToParValues = [...seenRelativeToPar].sort((a, b) => a - b);
+  for (let i = 1; i < relativeToParValues.length; i += 1) {
+    const previous = relativeToParValues[i - 1];
+    const current = relativeToParValues[i];
+    if (previous === undefined || current === undefined) continue;
+    if (current !== previous + 1) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['table'],
+        message:
+          `The points table jumps from ${previous} to ${current} relative to par, so a score of ` +
+          `${previous + 1} over par has no value. Table rows must run consecutively.`,
+      });
+      break;
+    }
+  }
+
   const seenRuleIds = new Set<string>();
   profile.specialRules.forEach((rule, index) => {
     if (seenRuleIds.has(rule.id)) {

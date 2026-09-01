@@ -177,3 +177,17 @@ describe('match play shape', () => {
     expect(rejectionMessage(ruleset)).toMatch(/teams/);
   });
 });
+
+describe('points table continuity', () => {
+  it('rejects a table with a gap in it', () => {
+    const ruleset = corruptibleRuleset();
+    // remove the bogey row, leaving par (0) and double bogey (+2) with nothing between
+    ruleset.scoringProfiles[0].table = ruleset.scoringProfiles[0].table.filter(
+      (row: { relativeToPar: number }) => row.relativeToPar !== 1,
+    );
+
+    const message = rejectionMessage(ruleset);
+    expect(message).toMatch(/consecutively/);
+    expect(message).toMatch(/1 over par/);
+  });
+});

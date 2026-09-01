@@ -26,7 +26,11 @@ importers:
 
   packages/db: {}
 
-  packages/scoring-engine: {}
+  packages/scoring-engine:
+    devDependencies:
+      '@ddga/types':
+        specifier: workspace:*
+        version: link:../types
 
   packages/types:
     dependencies:
