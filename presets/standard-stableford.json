@@ -1,0 +1,88 @@
+{
+  "rulesetId": "standard-stableford",
+  "version": 1,
+  "name": "Standard Stableford",
+  "orgId": null,
+  "engineVersionMin": "1.0.0",
+
+  "scoringProfiles": [
+    {
+      "id": "stableford-net",
+      "name": "Standard Stableford (net)",
+      "basis": "net",
+      "table": [
+        { "relativeToPar": -3, "label": "Albatross", "points": 5 },
+        { "relativeToPar": -2, "label": "Eagle",     "points": 4 },
+        { "relativeToPar": -1, "label": "Birdie",    "points": 3 },
+        { "relativeToPar": 0,  "label": "Par",       "points": 2 },
+        { "relativeToPar": 1,  "label": "Bogey",     "points": 1 }
+      ],
+      "betterThanTable": { "mode": "clamp" },
+      "worseThanTable": { "mode": "value", "points": 0 },
+      "specialRules": [],
+      "pickup": {
+        "policy": "cap_at_first_zero",
+        "fixedRelativeToPar": null,
+        "recordCappedStrokes": true
+      },
+      "handicapAllocation": {
+        "source": "course_handicap",
+        "allowance": 1.0,
+        "method": "stroke_index"
+      }
+    }
+  ],
+
+  "competitions": [
+    {
+      "id": "stableford",
+      "name": "Stableford",
+      "type": "individual_target",
+      "scoringProfile": "stableford-net",
+      "rounds": ["round-1", "round-2"],
+
+      "target": {
+        "label": "Target",
+        "abbreviation": "TGT",
+        "initialValue": { "method": "fixed", "value": 0 },
+        "carryover": "none",
+        "carryoverRounding": "half_up",
+        "adjustmentFactor": 0,
+        "adjustBetweenRounds": false,
+        "adjustAtEventEnd": false,
+        "runningTotal": "cumulative",
+        "precision": "full",
+        "displayPrecision": 0,
+        "prorateByHoles": false,
+        "didNotPlay": {
+          "ptp": "freeze",
+          "standing": "disqualify",
+          "showOnLeaderboard": true
+        },
+        "lapsedPlayer": {
+          "method": "carry_unchanged",
+          "requirePlannerConfirmation": false,
+          "maxAdjustment": null,
+          "plannerMayEditSuggestion": true
+        }
+      },
+
+      "eligibility": { "minimumRoundsCompleted": 1 },
+
+      "standings": { "sortBy": "running_total", "direction": "desc" },
+      "tiebreak": {
+        "chain": ["countback_final_nine"],
+        "fallback": { "mode": "planner_resolved", "label": "Card playoff" }
+      },
+
+      "payouts": []
+    }
+  ],
+
+  "validation": {
+    "assertSessionMatchesSumToTotal": true,
+    "assertClinchExceedsHalfOfTotal": true,
+    "assertAllReferencedRoundsExist": true,
+    "assertAllReferencedProfilesExist": true
+  }
+}
