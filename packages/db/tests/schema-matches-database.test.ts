@@ -38,6 +38,14 @@ const drizzleTables: PgTable[] = (Object.values(schema) as unknown[]).filter(
   (value): value is PgTable => is(value, PgTable),
 );
 
+/**
+ * Better Auth owns these (migration 0004) and reads them through its own adapter, so they are
+ * deliberately absent from the Drizzle schema. Listing them here rather than filtering them
+ * out generically means a new auth table cannot slip in unnoticed.
+ */
+const AUTH_TABLES = ['account', 'session', 'user', 'verification'];
+const NOT_DOMAIN = new Set([...AUTH_TABLES, 'schema_migrations']);
+
 let pool: Pool;
 
 beforeAll(async () => {
@@ -62,13 +70,26 @@ describe('the Drizzle schema and the database', () => {
     expect(drizzleTables).toHaveLength(28);
   });
 
-  it('names the same tables the database has', async () => {
+  it('names the same domain tables the database has', async () => {
     const { rows } = await pool.query<{ tablename: string }>(
-      "SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> 'schema_migrations' ORDER BY tablename",
+      "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename",
     );
-    const inDatabase = rows.map((row) => row.tablename);
+    const inDatabase = rows.map((row) => row.tablename).filter((name) => !NOT_DOMAIN.has(name));
     const inDrizzle = drizzleTables.map((table) => getTableConfig(table).name).sort();
     expect(inDrizzle).toEqual(inDatabase);
+  });
+
+  it('leaves the credential tables to Better Auth', async () => {
+    const { rows } = await pool.query<{ tablename: string }>(
+      `SELECT tablename FROM pg_tables WHERE schemaname = 'public'
+         AND tablename = ANY($1::text[]) ORDER BY tablename`,
+      [AUTH_TABLES],
+    );
+    // They exist in the database...
+    expect(rows.map((row) => row.tablename)).toEqual(AUTH_TABLES);
+    // ...and are intentionally not in the Drizzle schema.
+    const inDrizzle = drizzleTables.map((table) => getTableConfig(table).name);
+    expect(inDrizzle.filter((name) => AUTH_TABLES.includes(name))).toEqual([]);
   });
 
   it('agrees on every column, its type and its nullability', async () => {
@@ -80,15 +101,17 @@ describe('the Drizzle schema and the database', () => {
     }>(`
       SELECT table_name, column_name, data_type, is_nullable
       FROM information_schema.columns
-      WHERE table_schema = 'public' AND table_name <> 'schema_migrations'
+      WHERE table_schema = 'public'
       ORDER BY table_name, column_name
     `);
 
-    const database = rows.map((row) => ({
-      table: row.table_name,
-      column: row.column_name,
-      notNull: row.is_nullable === 'NO',
-    }));
+    const database = rows
+      .filter((row) => !NOT_DOMAIN.has(row.table_name))
+      .map((row) => ({
+        table: row.table_name,
+        column: row.column_name,
+        notNull: row.is_nullable === 'NO',
+      }));
 
     const drizzle = drizzleTables
       .flatMap((table) => {
@@ -122,11 +145,22 @@ describe('the guarantees the migrations carry', () => {
     expect(rows[0]?.count).toBe('0');
   });
 
-  it('carries 23 policies: 21 from the baseline plus 2 added for people', async () => {
+  it('carries 27 policies: 21 baseline, 2 for people, 4 denying the credential tables', async () => {
     const { rows } = await pool.query<{ count: string }>(
       "SELECT count(*) FROM pg_policies WHERE schemaname = 'public'",
     );
-    expect(rows[0]?.count).toBe('23');
+    expect(rows[0]?.count).toBe('27');
+  });
+
+  it('denies all access to the credential tables by policy', async () => {
+    const { rows } = await pool.query<{ tablename: string; qual: string }>(
+      `SELECT tablename, qual FROM pg_policies
+        WHERE schemaname = 'public' AND policyname = 'auth_owner_only' ORDER BY tablename`,
+    );
+    expect(rows.map((row) => row.tablename)).toEqual(AUTH_TABLES);
+    for (const row of rows) {
+      expect(row.qual, row.tablename).toBe('false');
+    }
   });
 
   it('protects people, which the baseline schema did not', async () => {
