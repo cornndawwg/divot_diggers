@@ -244,3 +244,105 @@ describe('ADVERSARIAL: the new write policies', () => {
     ).rejects.toThrow(/row-level security/i);
   });
 });
+
+describe('BUILD-TASKS 2.5: two rounds on the same course', () => {
+  // An 18-hole dogfight round and a 9-hole Cup round, on one course. Each has to report
+  // its own hole count and par total.
+  let courseId = '';
+  let eventId = '';
+
+  beforeAll(async () => {
+    const seed = JSON.parse(
+      (await import('node:fs')).readFileSync(
+        (await import('node:url')).fileURLToPath(
+          new URL('../../../seed/caledonia.json', import.meta.url),
+        ),
+        'utf8',
+      ),
+    ) as unknown;
+
+    const created = await post('/api/courses', seed, cookies);
+    expect(created.status).toBe(201);
+    courseId = ((await created.json()) as { id: string }).id;
+
+    const events = await harness.request('/api/events', { cookies });
+    eventId = ((await events.json()) as { events: { id: string }[] }).events[0]?.id ?? '';
+  });
+
+  async function makeRound(name: string, holeSelection: unknown): Promise<string> {
+    const response = await post('/api/rounds', { eventId, courseId, name, holeSelection }, cookies);
+    expect(response.status).toBe(201);
+    return ((await response.json()) as { id: string }).id;
+  }
+
+  async function readRound(id: string) {
+    const response = await harness.request(`/api/rounds/${id}`, { cookies });
+    expect(response.status).toBe(200);
+    return (await response.json()) as {
+      name: string;
+      course: string;
+      teeSet: string;
+      resolved: { holeCount: number; parTotal: number; outPar: number | null; inPar: number | null };
+    };
+  }
+
+  it('reports 18 holes and par 70 for the dogfight round', async () => {
+    const id = await makeRound('Thursday AM dogfight', { mode: 'all' });
+    const round = await readRound(id);
+    expect(round.course).toBe('Caledonia Golf & Fish Club');
+    expect(round.teeSet).toBe('Pintail'); // the longest tee set, chosen by default
+    expect(round.resolved.holeCount).toBe(18);
+    expect(round.resolved.parTotal).toBe(70);
+    expect([round.resolved.outPar, round.resolved.inPar]).toEqual([35, 35]);
+  });
+
+  it('reports 9 holes and par 35 for the Cup round on the same course', async () => {
+    const id = await makeRound('Thursday PM Cup', { mode: 'front9' });
+    const round = await readRound(id);
+    expect(round.course).toBe('Caledonia Golf & Fish Club');
+    expect(round.resolved.holeCount).toBe(9);
+    expect(round.resolved.parTotal).toBe(35);
+    expect(round.resolved.inPar).toBeNull();
+  });
+
+  it('keeps both rounds on the one event, each with its own selection', async () => {
+    const events = await harness.request('/api/events', { cookies });
+    const body = (await events.json()) as { events: { id: string; rounds: number }[] };
+    const event = body.events.find((entry) => entry.id === eventId);
+    // The casual round from the earlier test, plus these two.
+    expect(event?.rounds).toBeGreaterThanOrEqual(3);
+  });
+
+  it('refuses a round whose selection cannot be played', async () => {
+    const response = await post(
+      '/api/rounds',
+      { eventId, courseId, name: 'Nonsense', holeSelection: { mode: 'custom', holes: [19, 20] } },
+      cookies,
+    );
+    expect(response.status).toBe(422);
+    expect(((await response.json()) as { error: string }).error).toMatch(/not on the Pintail tees/);
+  });
+
+  it('refuses a malformed selection before it reaches the database', async () => {
+    const response = await post(
+      '/api/rounds',
+      { eventId, courseId, holeSelection: { mode: 'front-nine' } },
+      cookies,
+    );
+    expect(response.status).toBe(400);
+  });
+
+  it('wrote no round for either rejection', async () => {
+    const { rows } = await harness.privilegedPool.query<{ name: string }>(
+      'SELECT name FROM rounds WHERE event_id = $1 ORDER BY sequence',
+      [eventId],
+    );
+    // Only the rounds that were accepted. Nothing named Nonsense, and nothing from the
+    // malformed request either.
+    expect(rows.map((row) => row.name)).toEqual([
+      'Parking Lot Muni',
+      'Thursday AM dogfight',
+      'Thursday PM Cup',
+    ]);
+  });
+});
