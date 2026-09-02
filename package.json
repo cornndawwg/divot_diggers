@@ -11,7 +11,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "pnpm -r --if-present typecheck",
-    "db:verify-schema": "bash scripts/verify-schema.sh"
+    "db:verify-schema": "bash scripts/verify-schema.sh",
+    "db:verify-migration": "bash scripts/verify-migration.sh",
+    "db:migrate": "node --experimental-strip-types packages/db/scripts/migrate.ts",
+    "db:verify-schema-types": "vitest run packages/db"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",

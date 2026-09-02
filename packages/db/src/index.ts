@@ -1,2 +1,4 @@
-// Drizzle schema and migrations. Ported from docs/schema.sql at task 2.1.
-export {};
+// Drizzle schema, connection helper and the plain SQL migration runner.
+export * from './schema/index';
+export * from './client';
+export * from './migrate';

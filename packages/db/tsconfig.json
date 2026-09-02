@@ -1,4 +1,11 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["src/**/*.ts", "tests/**/*.ts"]
+  "compilerOptions": {
+    // The migrate CLI runs directly under `node --experimental-strip-types`, whose ESM
+    // resolver needs explicit .ts specifiers. Nothing here is emitted: bundlers and
+    // vitest consume the source, and typecheck runs with --noEmit.
+    "noEmit": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"]
 }
