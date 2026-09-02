@@ -1,5 +1,5 @@
 import type { MatchPlaySession, TeamMatchPlayCompetition } from '@ddga/types';
-import { ScoringConfigError, ScoringInputError } from './errors';
+import { ScoringConfigError, ScoringInputError } from './errors.ts';
 
 /** Positional labels for the two sides of one match, in the order the config lists the teams. */
 export type Side = 'a' | 'b';

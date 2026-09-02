@@ -1,6 +1,6 @@
 import type { Target } from '@ddga/types';
-import { ScoringInputError } from './errors';
-import { applyRounding } from './rounding';
+import { ScoringInputError } from './errors.ts';
+import { applyRounding } from './rounding.ts';
 
 /** Where a player stands part-way through an event. */
 export interface TargetState {

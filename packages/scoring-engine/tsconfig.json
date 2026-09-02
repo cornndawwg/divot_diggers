@@ -1,4 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Imported at runtime by code running under `node --experimental-strip-types`, whose
+    // ESM resolver needs explicit .ts specifiers. Nothing is emitted from here.
+    "noEmit": true,
+    "allowImportingTsExtensions": true
+  },
   "include": ["src/**/*.ts", "tests/**/*.ts"]
 }

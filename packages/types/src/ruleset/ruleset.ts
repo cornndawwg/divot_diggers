@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { identifierSchema, semverSchema } from './common';
-import { competitionSchema, type Competition } from './competitions';
-import { scoringProfileSchema } from './scoring-profile';
+import { identifierSchema, semverSchema } from './common.ts';
+import { competitionSchema, type Competition } from './competitions.ts';
+import { scoringProfileSchema } from './scoring-profile.ts';
 
 /**
  * Which cross-document assertions to run. All default to on: a ruleset that omits the block

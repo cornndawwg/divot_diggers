@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { identifierSchema } from './common';
+import { identifierSchema } from './common.ts';
 
 /**
  * One row of the points table. Fully CRUD — a planner adds, edits and deletes rows, and the

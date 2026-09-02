@@ -5,7 +5,7 @@ import {
   plannerResolvedFallbackSchema,
   roundingModeSchema,
   teamPayoutSchema,
-} from './common';
+} from './common.ts';
 
 // ---------------------------------------------------------------------------
 // individual_target — the Divot Diggers dogfight, quota games, Stableford

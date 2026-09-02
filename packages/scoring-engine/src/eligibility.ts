@@ -1,5 +1,5 @@
 import type { IndividualTargetCompetition } from '@ddga/types';
-import type { PlayerEventResult } from './target';
+import type { PlayerEventResult } from './target.ts';
 
 export interface EligibilityVerdict {
   /** False when this player is out of the running for this event's standings. */

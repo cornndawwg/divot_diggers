@@ -7,6 +7,10 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
+    // Node runs this code under --experimental-strip-types, which erases types without
+    // transforming anything. Parameter properties, enums, namespaces and decorators all
+    // need a transform, so they fail at runtime. This makes them fail at typecheck instead.
+    "erasableSyntaxOnly": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,

@@ -1,6 +1,6 @@
 import type { Target } from '@ddga/types';
-import { ScoringInputError } from './errors';
-import { applyRounding } from './rounding';
+import { ScoringInputError } from './errors.ts';
+import { applyRounding } from './rounding.ts';
 
 export interface LapsedPlayerInput {
   /** The target they carried out of their last appearance. */

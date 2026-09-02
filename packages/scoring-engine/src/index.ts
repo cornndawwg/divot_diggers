@@ -4,11 +4,11 @@
 // factor and threshold arrives as config. No I/O, no dates, no React, no network, and no
 // runtime dependencies: the only imports are types, which erase at compile time.
 
-export * from './errors';
-export * from './rounding';
-export * from './hole-points';
-export * from './target';
-export * from './standings';
-export * from './eligibility';
-export * from './lapsed-player';
-export * from './match-play';
+export * from './errors.ts';
+export * from './rounding.ts';
+export * from './hole-points.ts';
+export * from './target.ts';
+export * from './standings.ts';
+export * from './eligibility.ts';
+export * from './lapsed-player.ts';
+export * from './match-play.ts';

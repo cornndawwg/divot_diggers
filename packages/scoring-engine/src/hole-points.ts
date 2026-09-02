@@ -1,5 +1,5 @@
 import type { PointsTableRow, ScoringProfile } from '@ddga/types';
-import { ScoringConfigError, ScoringInputError } from './errors';
+import { ScoringConfigError, ScoringInputError } from './errors.ts';
 
 function assertPlayableNumber(value: number, label: string): void {
   if (!Number.isFinite(value)) {

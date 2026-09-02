@@ -1,5 +1,5 @@
-import { RulesetValidationError, toRulesetIssues } from './errors';
-import { rulesetSchema, type Ruleset } from './ruleset';
+import { RulesetValidationError, toRulesetIssues } from './errors.ts';
+import { rulesetSchema, type Ruleset } from './ruleset.ts';
 
 export type RulesetParseResult =
   | { readonly success: true; readonly data: Ruleset }

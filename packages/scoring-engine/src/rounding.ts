@@ -1,5 +1,5 @@
 import type { RoundingMode } from '@ddga/types';
-import { ScoringConfigError } from './errors';
+import { ScoringConfigError } from './errors.ts';
 
 /**
  * Rounding, stated explicitly for every mode.
