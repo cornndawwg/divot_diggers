@@ -17,7 +17,8 @@
     "db:verify-schema-types": "vitest run packages/db",
     "dev:api": "node --experimental-strip-types --env-file=.env apps/api/src/server.ts",
     "dev:web": "pnpm --filter @ddga/web dev",
-    "db:setup-dev": "bash scripts/setup-dev-db.sh"
+    "db:setup-dev": "bash scripts/setup-dev-db.sh",
+    "auth:link": "node --experimental-strip-types --env-file=.env apps/api/scripts/dev-auth-link.ts"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",
