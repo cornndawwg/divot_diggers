@@ -11,3 +11,4 @@ export * from './target';
 export * from './standings';
 export * from './eligibility';
 export * from './lapsed-player';
+export * from './match-play';
