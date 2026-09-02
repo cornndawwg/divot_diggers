@@ -42,3 +42,48 @@ dl { margin: 0; }
 dt { font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-top: 0.9rem; }
 dd { margin: 0.15rem 0 0; }
 .hint { font-size: 0.8rem; color: var(--muted); margin: 0.3rem 0 0; }
+
+/* --- Par-only quick entry. Big targets: this gets used outdoors, one-handed. --- */
+main.wide { max-width: 34rem; }
+.row { display: flex; gap: 0.6rem; align-items: center; }
+.row > * { flex: 1; }
+.holes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin: 0 0 1rem; }
+.hole {
+  display: flex; flex-direction: column; align-items: center; gap: 0.2rem;
+  padding: 0.55rem 0 0.7rem; background: #fff;
+  border: 1px solid var(--line); border-radius: 9px;
+}
+.hole .n { font-size: 0.7rem; font-weight: 700; color: var(--muted); letter-spacing: 0.04em; }
+.hole button {
+  width: 3rem; height: 3rem; padding: 0; font-size: 1.5rem; font-weight: 700;
+  background: #f0f3f0; color: var(--ink); border: 1px solid var(--line);
+}
+.hole button:active { background: var(--green); color: #fff; }
+.totals {
+  display: flex; justify-content: space-between; font-size: 0.9rem;
+  color: var(--muted); margin: 0 0 1rem; padding: 0.6rem 0.8rem;
+  background: #fff; border: 1px solid var(--line); border-radius: 8px;
+}
+.totals b { color: var(--ink); }
+.seg { display: flex; gap: 0; margin: 0 0 1rem; }
+.seg button {
+  border-radius: 0; background: #fff; color: var(--ink); border: 1px solid var(--line);
+  font-weight: 600;
+}
+.seg button:first-child { border-radius: 7px 0 0 7px; }
+.seg button:last-child { border-radius: 0 7px 7px 0; border-left: 0; }
+.seg button[aria-pressed='true'] { background: var(--green); color: #fff; border-color: var(--green); }
+.list { list-style: none; padding: 0; margin: 0; }
+.list li {
+  display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;
+  padding: 0.7rem 0; border-bottom: 1px solid var(--line);
+}
+.list li:last-child { border-bottom: 0; }
+.list .meta { font-size: 0.82rem; color: var(--muted); }
+.list button { width: auto; padding: 0.45rem 0.8rem; font-size: 0.85rem; }
+.check { font-size: 0.85rem; margin: 0.15rem 0; }
+.check.fail { color: var(--red); }
+.link-button {
+  width: auto; background: none; color: var(--green); padding: 0;
+  font-weight: 600; text-decoration: underline;
+}

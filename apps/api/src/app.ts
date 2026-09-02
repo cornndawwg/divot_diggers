@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Pool } from 'pg';
 import type { Auth } from './auth/auth.ts';
+import { plannerRoutes } from './planner/routes.ts';
 
 export interface AppOptions {
   readonly auth: Auth;
@@ -53,6 +54,8 @@ export function createApp(options: AppOptions): Hono {
 
   // Better Auth owns every route under here: sign-up, sign-in, verification, reset.
   app.on(['GET', 'POST'], '/api/auth/*', (c) => auth.handler(c.req.raw));
+
+  app.route('/', plannerRoutes({ auth, privilegedPool, domainPool }));
 
   app.get('/api/me', async (c) => {
     const session = await auth.api.getSession({ headers: c.req.raw.headers });

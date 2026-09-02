@@ -145,11 +145,44 @@ describe('the guarantees the migrations carry', () => {
     expect(rows[0]?.count).toBe('0');
   });
 
-  it('carries 27 policies: 21 baseline, 2 for people, 4 denying the credential tables', async () => {
+  it('carries 31 policies, and accounts for every one', async () => {
     const { rows } = await pool.query<{ count: string }>(
       "SELECT count(*) FROM pg_policies WHERE schemaname = 'public'",
     );
-    expect(rows[0]?.count).toBe('27');
+    // 21 from the docs/schema.sql baseline, then, per migration:
+    //   0003  person_read, person_update_self
+    //   0004  auth_owner_only on each of the four credential tables
+    //   0005  course_write, course_update, round_write, round_update
+    expect(rows[0]?.count).toBe('31');
+  });
+
+  it('gives the planner write paths a policy each', async () => {
+    const { rows } = await pool.query<{ policyname: string; cmd: string }>(
+      `SELECT policyname, cmd FROM pg_policies
+        WHERE schemaname = 'public'
+          AND policyname IN ('course_write','course_update','round_write','round_update')
+        ORDER BY policyname`,
+    );
+    expect(rows).toEqual([
+      { policyname: 'course_update', cmd: 'UPDATE' },
+      { policyname: 'course_write', cmd: 'INSERT' },
+      { policyname: 'round_update', cmd: 'UPDATE' },
+      { policyname: 'round_write', cmd: 'INSERT' },
+    ]);
+  });
+
+  it('creates a group and its owner membership in one function', async () => {
+    // Bootstrapping needs a SECURITY DEFINER function, not a loose INSERT policy: a
+    // policy able to insert an organization could insert one nobody belongs to.
+    const { rows } = await pool.query<{ proname: string; prosecdef: boolean }>(
+      `SELECT proname, prosecdef FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND proname IN ('create_organization','create_event')
+        ORDER BY proname`,
+    );
+    expect(rows).toEqual([
+      { proname: 'create_event', prosecdef: true },
+      { proname: 'create_organization', prosecdef: true },
+    ]);
   });
 
   it('denies all access to the credential tables by policy', async () => {

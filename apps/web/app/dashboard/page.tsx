@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiUrl, authClient } from '../../lib/auth-client';
 
@@ -17,27 +17,48 @@ interface Me {
   events: EventRole[];
 }
 
+interface Organization {
+  id: string;
+  name: string;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
+  const [orgs, setOrgs] = useState<Organization[]>([]);
+  const [groupName, setGroupName] = useState('');
+  const [busy, setBusy] = useState(false);
   const [state, setState] = useState<'loading' | 'ready' | 'signed-out'>('loading');
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const response = await fetch(`${apiUrl}/api/me`, { credentials: 'include' });
-      if (cancelled) return;
-      if (response.status === 401) {
-        setState('signed-out');
-        return;
-      }
-      setMe((await response.json()) as Me);
-      setState('ready');
-    })();
-    return () => {
-      cancelled = true;
-    };
+  const load = useCallback(async () => {
+    const response = await fetch(`${apiUrl}/api/me`, { credentials: 'include' });
+    if (response.status === 401) {
+      setState('signed-out');
+      return;
+    }
+    setMe((await response.json()) as Me);
+    const groups = await fetch(`${apiUrl}/api/organizations`, { credentials: 'include' });
+    setOrgs(((await groups.json()) as { organizations: Organization[] }).organizations);
+    setState('ready');
   }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function createGroup() {
+    if (groupName.trim() === '') return;
+    setBusy(true);
+    await fetch(`${apiUrl}/api/organizations`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: groupName.trim() }),
+    });
+    setBusy(false);
+    setGroupName('');
+    await load();
+  }
 
   if (state === 'loading') {
     return <div className="card">Loading…</div>;
@@ -64,6 +85,30 @@ export default function DashboardPage() {
         <dl>
           <dt>Email</dt>
           <dd>{me.email}</dd>
+          <dt>Group</dt>
+          <dd>
+            {orgs.length > 0 ? (
+              orgs.map((org) => <div key={org.id}>{org.name}</div>)
+            ) : (
+              <>
+                {/* Without a group, row level security hides every course and event. */}
+                <p className="hint">
+                  You are not in a group yet. Create one and the rest of the app opens up.
+                </p>
+                <div className="row" style={{ marginTop: '0.5rem' }}>
+                  <input
+                    value={groupName}
+                    onChange={(event) => setGroupName(event.target.value)}
+                    placeholder="Divot Diggers"
+                    aria-label="Group name"
+                  />
+                  <button type="button" onClick={() => void createGroup()} disabled={busy}>
+                    {busy ? 'Creating…' : 'Create'}
+                  </button>
+                </div>
+              </>
+            )}
+          </dd>
           <dt>Events</dt>
           <dd>
             {me.events.length === 0
@@ -75,6 +120,9 @@ export default function DashboardPage() {
                 ))}
           </dd>
         </dl>
+        <p className="note">
+          <a href="/courses">Courses</a>
+        </p>
         <p className="note">
           <button
             type="button"
