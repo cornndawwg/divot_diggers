@@ -117,9 +117,12 @@ export const ORG_A = '11111111-1111-1111-1111-111111111111';
 export const ORG_B = '22222222-2222-2222-2222-222222222222';
 export const INSIDER = 'aaaaaaaa-0000-0000-0000-000000000001';
 export const OUTSIDER = 'bbbbbbbb-0000-0000-0000-000000000002';
+/** On org A's roster but NOT an org member — the case that would blank a leaderboard. */
+export const GUEST = 'cccc0000-0000-0000-0000-000000000003';
 export const EVENT_A = 'eeeeeeee-0000-0000-0000-000000000001';
 export const EVENT_B = 'eeeeeeee-0000-0000-0000-000000000002';
 export const PLAYER_A = 'ffffffff-0000-0000-0000-000000000001';
+export const PLAYER_GUEST = 'ffffffff-0000-0000-0000-000000000002';
 export const RULESET_A = 'dddddddd-0000-0000-0000-000000000001';
 export const TEAM_A = 'cccccccc-0000-0000-0000-00000000000a';
 export const TEAM_B = 'cccccccc-0000-0000-0000-00000000000b';
@@ -132,8 +135,9 @@ export async function seed(owner: Pool): Promise<void> {
     [ORG_A, ORG_B],
   );
   await owner.query(
-    `INSERT INTO people (id, display_name, email) VALUES ($1,'Justin','j@x.com'), ($2,'Outsider','o@y.com')`,
-    [INSIDER, OUTSIDER],
+    `INSERT INTO people (id, display_name, email)
+     VALUES ($1,'Justin','j@x.com'), ($2,'Outsider','o@y.com'), ($3,'Guest Golfer','g@z.com')`,
+    [INSIDER, OUTSIDER, GUEST],
   );
   await owner.query(
     `INSERT INTO org_members (org_id, person_id, role) VALUES ($1,$2,'owner'), ($3,$4,'owner')`,
@@ -165,6 +169,12 @@ export async function seed(owner: Pool): Promise<void> {
     `INSERT INTO event_players (id, event_id, person_id, starting_ptp, starting_ptp_source)
      VALUES ($1,$2,$3,46,'carried')`,
     [PLAYER_A, EVENT_A, INSIDER],
+  );
+  // A guest on the roster with no org membership.
+  await owner.query(
+    `INSERT INTO event_players (id, event_id, person_id, starting_ptp, starting_ptp_source)
+     VALUES ($1,$2,$3,30,'seeded_from_handicap')`,
+    [PLAYER_GUEST, EVENT_A, GUEST],
   );
   await owner.query(
     `INSERT INTO player_ratings (org_id, person_id, competition_key, raw_value, rounded_value, reason)

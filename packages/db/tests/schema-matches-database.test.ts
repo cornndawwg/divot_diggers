@@ -122,11 +122,18 @@ describe('the guarantees the migrations carry', () => {
     expect(rows[0]?.count).toBe('0');
   });
 
-  it('carries all 21 policies', async () => {
+  it('carries 23 policies: 21 from the baseline plus 2 added for people', async () => {
     const { rows } = await pool.query<{ count: string }>(
       "SELECT count(*) FROM pg_policies WHERE schemaname = 'public'",
     );
-    expect(rows[0]?.count).toBe('21');
+    expect(rows[0]?.count).toBe('23');
+  });
+
+  it('protects people, which the baseline schema did not', async () => {
+    const { rows } = await pool.query<{ polname: string }>(
+      "SELECT polname FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid WHERE c.relname = 'people' ORDER BY polname",
+    );
+    expect(rows.map((row) => row.polname)).toEqual(['person_read', 'person_update_self']);
   });
 
   it('carries a row_version trigger on every syncable table', async () => {

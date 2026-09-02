@@ -4,6 +4,7 @@ import {
   seed,
   EVENT_A,
   EVENT_B,
+  GUEST,
   INSIDER,
   ORG_A,
   OUTSIDER,
@@ -82,7 +83,7 @@ describe('the data really is there', () => {
   // Guards against the false pass: zero rows is also what an empty database returns.
   it('holds org A rows that the owner can see', async () => {
     expect(await countAsOwner('SELECT count(*) FROM events')).toBe(2);
-    expect(await countAsOwner('SELECT count(*) FROM event_players')).toBe(1);
+    expect(await countAsOwner('SELECT count(*) FROM event_players')).toBe(2);
     expect(await countAsOwner('SELECT count(*) FROM rounds')).toBe(1);
     expect(await countAsOwner('SELECT count(*) FROM scorecards')).toBe(1);
     expect(await countAsOwner('SELECT count(*) FROM cup_teams')).toBe(2);
@@ -101,7 +102,7 @@ describe('an insider sees their own organization', () => {
   it('sees their org, event, players and rounds', async () => {
     expect(await countAs(INSIDER, 'SELECT count(*) FROM organizations')).toBe(1);
     expect(await countAs(INSIDER, 'SELECT count(*) FROM events')).toBe(1);
-    expect(await countAs(INSIDER, 'SELECT count(*) FROM event_players')).toBe(1);
+    expect(await countAs(INSIDER, 'SELECT count(*) FROM event_players')).toBe(2);
     expect(await countAs(INSIDER, 'SELECT count(*) FROM rounds')).toBe(1);
     expect(await countAs(INSIDER, 'SELECT count(*) FROM scorecards')).toBe(1);
     expect(await countAs(INSIDER, 'SELECT count(*) FROM cup_teams')).toBe(2);
@@ -244,10 +245,6 @@ describe('every table is covered by RLS', () => {
       'cup_sessions',
       'cup_team_members',
       'hole_score_audit',
-      // `people` is global identity by design (spec part 3), but global identity does not
-      // require global readability: with no policy, any authenticated connection can read
-      // every person's name, email and phone across every tenant. See the test below.
-      'people',
       'round_competitions',
       'tee_group_members',
       'tee_groups',
@@ -256,23 +253,77 @@ describe('every table is covered by RLS', () => {
   });
 });
 
-describe('FINDING: the people table is readable across tenants', () => {
-  // Documented rather than silently accepted. docs/schema.sql enables RLS on 17 tables and
-  // `people` is not one of them, so this passes today and is the behaviour to change if the
-  // decision is that it should not.
-  it('lets org B read org A members’ names and email addresses', async () => {
+describe('the people table, since migration 0003', () => {
+  it('no longer lets org B read org A members', async () => {
     const rows = await database.asPerson(OUTSIDER, async (client) =>
       (
-        await client.query<{ display_name: string; email: string }>(
-          'SELECT display_name, email FROM people ORDER BY display_name',
-        )
+        await client.query<{ display_name: string }>('SELECT display_name FROM people ORDER BY 1')
       ).rows,
     );
-    expect(rows.map((row) => row.display_name)).toEqual(['Justin', 'Outsider']);
-    expect(rows.map((row) => row.email)).toContain('j@x.com');
+    // Only themselves. Justin and the guest are both invisible.
+    expect(rows.map((row) => row.display_name)).toEqual(['Outsider']);
   });
 
-  it('is the only unprotected table holding personal data', async () => {
+  it('leaks no email address across tenants', async () => {
+    expect(
+      await countAs(OUTSIDER, `SELECT count(*) FROM people WHERE email = 'j@x.com'`),
+    ).toBe(0);
+    // The row is really there; it is RLS hiding it.
+    expect(await countAsOwner(`SELECT count(*) FROM people WHERE email = 'j@x.com'`)).toBe(1);
+  });
+
+  it('still lets a person read themselves', async () => {
+    expect(await countAs(INSIDER, `SELECT count(*) FROM people WHERE id = '${INSIDER}'`)).toBe(1);
+    expect(await countAs(OUTSIDER, `SELECT count(*) FROM people WHERE id = '${OUTSIDER}'`)).toBe(1);
+  });
+
+  it('still lets org-mates read each other', async () => {
+    await database.owner.query(
+      `INSERT INTO people (id, display_name, email) VALUES ($1,'Team Mate','t@x.com')`,
+      ['aaaaaaaa-0000-0000-0000-000000000009'],
+    );
+    await database.owner.query(
+      `INSERT INTO org_members (org_id, person_id, role) VALUES ($1,$2,'member')`,
+      [ORG_A, 'aaaaaaaa-0000-0000-0000-000000000009'],
+    );
+    expect(
+      await countAs(INSIDER, `SELECT count(*) FROM people WHERE display_name = 'Team Mate'`),
+    ).toBe(1);
+    expect(
+      await countAs(OUTSIDER, `SELECT count(*) FROM people WHERE display_name = 'Team Mate'`),
+    ).toBe(0);
+  });
+
+  it('still shows a guest player, who is on the roster but in no organization', async () => {
+    // The leaderboard case: a guest with no org membership must not render as a blank name.
+    expect(await countAsOwner(`SELECT count(*) FROM org_members WHERE person_id = '${GUEST}'`)).toBe(0);
+    expect(await countAs(INSIDER, `SELECT count(*) FROM people WHERE id = '${GUEST}'`)).toBe(1);
+    expect(await countAs(OUTSIDER, `SELECT count(*) FROM people WHERE id = '${GUEST}'`)).toBe(0);
+  });
+
+  it('lets a person edit their own profile', async () => {
+    await database.asPerson(INSIDER, (client) =>
+      client.query(`UPDATE people SET phone = '555-0100' WHERE id = $1`, [INSIDER]),
+    );
+    const { rows } = await database.owner.query<{ phone: string }>(
+      'SELECT phone FROM people WHERE id = $1',
+      [INSIDER],
+    );
+    expect(rows[0]?.phone).toBe('555-0100');
+  });
+
+  it('refuses to let one person edit another', async () => {
+    await database.asPerson(OUTSIDER, (client) =>
+      client.query(`UPDATE people SET display_name = 'hijacked' WHERE id = $1`, [INSIDER]),
+    );
+    const { rows } = await database.owner.query<{ display_name: string }>(
+      'SELECT display_name FROM people WHERE id = $1',
+      [INSIDER],
+    );
+    expect(rows[0]?.display_name).toBe('Justin');
+  });
+
+  it('leaves no unprotected table holding personal data', async () => {
     const rows = (
       await database.owner.query<{ relname: string }>(`
         SELECT c.relname FROM pg_class c
@@ -282,7 +333,7 @@ describe('FINDING: the people table is readable across tenants', () => {
         WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity
       `)
     ).rows.map((row) => row.relname);
-    expect([...new Set(rows)]).toEqual(['people']);
+    expect([...new Set(rows)]).toEqual([]);
   });
 });
 
