@@ -48,13 +48,16 @@ passes.
 Everything below assumes `.env` exists (copy `.env.example`). `.env` is gitignored and holds
 real credentials — never commit it.
 
-**Database.** Postgres 16 runs in Docker as its own container, separate from anything else on
-the machine:
+**One-time setup.** Postgres 16 runs in Docker as its own container, separate from anything
+else on the machine:
 
 ```
-docker start ddga-postgres          # or see .env.example for the create command
-pnpm db:migrate                     # apply the SQL migrations
+docker start ddga-postgres          # see .env.example for the create command
+pnpm db:setup-dev                   # migrate, then create the non-owning role the API uses
 ```
+
+`db:setup-dev` is safe to re-run and never drops the database. It writes `APP_DATABASE_URL`
+into `.env` for you.
 
 **The two servers**, in separate terminals:
 
@@ -62,6 +65,10 @@ pnpm db:migrate                     # apply the SQL migrations
 pnpm dev:api                        # API + auth on http://localhost:8787
 pnpm dev:web                        # planner console on http://localhost:3000
 ```
+
+Leave both running and open http://localhost:3000. If either reports
+`EADDRINUSE`, a copy is already running — the error message tells you how to find and stop it.
+On a remote machine, forward ports 3000 and 8787 (VS Code does this from its Ports panel).
 
 **Checks you can run**, in rough order of how much they prove:
 
