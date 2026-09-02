@@ -40,3 +40,38 @@ None of that is hardcoded. Both are expressed as config so other groups can run 
 
 `pnpm test` reproducing 87 player-year cases from `fixtures/`. Nothing else matters until that
 passes.
+
+---
+
+## Running it locally
+
+Everything below assumes `.env` exists (copy `.env.example`). `.env` is gitignored and holds
+real credentials — never commit it.
+
+**Database.** Postgres 16 runs in Docker as its own container, separate from anything else on
+the machine:
+
+```
+docker start ddga-postgres          # or see .env.example for the create command
+pnpm db:migrate                     # apply the SQL migrations
+```
+
+**The two servers**, in separate terminals:
+
+```
+pnpm dev:api                        # API + auth on http://localhost:8787
+pnpm dev:web                        # planner console on http://localhost:3000
+```
+
+**Checks you can run**, in rough order of how much they prove:
+
+| Command | What it proves |
+|---|---|
+| `pnpm test` | The whole suite, including the 87 golden dogfight cases |
+| `pnpm typecheck` | Every package compiles under strict TypeScript |
+| `pnpm db:verify-schema` | `docs/schema.sql`'s own guarantees still hold |
+| `pnpm db:verify-migration` | The baseline migrations still reproduce `docs/schema.sql` exactly |
+
+**A note on the API and RLS.** Set `APP_DATABASE_URL` to a **non-owning** Postgres role. A table
+owner bypasses its own row level security, which would make every policy decorative. The API
+warns loudly on startup if that variable is missing.

@@ -14,7 +14,9 @@
     "db:verify-schema": "bash scripts/verify-schema.sh",
     "db:verify-migration": "bash scripts/verify-migration.sh",
     "db:migrate": "node --experimental-strip-types packages/db/scripts/migrate.ts",
-    "db:verify-schema-types": "vitest run packages/db"
+    "db:verify-schema-types": "vitest run packages/db",
+    "dev:api": "node --experimental-strip-types --env-file=.env apps/api/src/server.ts",
+    "dev:web": "pnpm --filter @ddga/web dev"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",

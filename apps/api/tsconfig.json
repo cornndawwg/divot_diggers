@@ -1,4 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // The API runs directly under `node --experimental-strip-types`, whose ESM resolver
+    // needs explicit .ts specifiers on relative imports. Nothing is emitted from here.
+    "noEmit": true,
+    "allowImportingTsExtensions": true
+  },
   "include": ["src/**/*.ts", "tests/**/*.ts"]
 }
