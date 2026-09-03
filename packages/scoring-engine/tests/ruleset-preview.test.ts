@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseRuleset, type ScoringProfile } from '@ddga/types';
+import { parseRuleset, safeParseRuleset, type ScoringProfile } from '@ddga/types';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { applyRound, holePoints, initialTargetState, pickupCapRelativeToPar } from '../src/index.ts';
@@ -116,5 +116,56 @@ describe('a draft that does not make sense yet', () => {
     expect(() => previewOf(broken as unknown as Record<string, unknown>)).toThrow(
       /consecutively/,
     );
+  });
+});
+
+describe('extending the points table to better scores', () => {
+  /** What the editor's "+ better score" button produces. */
+  function withBetterRow(points: number): Record<string, unknown> {
+    const copy = structuredClone(REFERENCE) as {
+      scoringProfiles: { table: { relativeToPar: number; label: string; points: number }[] }[];
+    };
+    const table = copy.scoringProfiles[0]?.table;
+    if (table === undefined) throw new Error('no table');
+    const best = [...table].sort((a, b) => a.relativeToPar - b.relativeToPar)[0];
+    if (best === undefined) throw new Error('no rows');
+    table.push({ relativeToPar: best.relativeToPar - 1, label: 'Condor', points });
+    return copy as unknown as Record<string, unknown>;
+  }
+
+  it('accepts a row better than the previous best', () => {
+    // The reference table stops at 3 under. A group wanting to pay a condor adds 4 under.
+    const extended = parseRuleset(withBetterRow(25));
+    const rows = extended.scoringProfiles[0]?.table ?? [];
+    expect(Math.min(...rows.map((row) => row.relativeToPar))).toBe(-4);
+  });
+
+  it('scores that new row rather than clamping to the old best', () => {
+    const profile = parseRuleset(withBetterRow(25)).scoringProfiles[0] as ScoringProfile;
+    // A 1 on a par 5 is four under.
+    expect(holePoints(1, 5, profile)).toBe(25);
+    // And the row below it is untouched.
+    expect(holePoints(2, 5, profile)).toBe(16);
+  });
+
+  it('still clamps anything beyond the new best', () => {
+    const profile = parseRuleset(withBetterRow(25)).scoringProfiles[0] as ScoringProfile;
+    // Five under is beyond the table; betterThanTable is clamp in this ruleset.
+    expect(holePoints(1, 6, profile)).toBe(25);
+  });
+
+  it('rejects a row that would leave a gap', () => {
+    const gapped = structuredClone(REFERENCE) as {
+      scoringProfiles: { table: { relativeToPar: number; label: string; points: number }[] }[];
+    };
+    // Jump straight to 5 under, skipping 4 under.
+    gapped.scoringProfiles[0]?.table.push({ relativeToPar: -5, label: 'Whatever', points: 30 });
+    const result = safeParseRuleset(gapped);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((issue) => issue.message).join(' ')).toMatch(
+        /consecutively/,
+      );
+    }
   });
 });

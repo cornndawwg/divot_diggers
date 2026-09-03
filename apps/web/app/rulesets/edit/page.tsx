@@ -12,6 +12,7 @@ import {
   profileOf,
   setPath,
   sortedTable,
+  suggestedLabel,
   tableOf,
   targetCompetitionOf,
   type Draft,
@@ -113,13 +114,28 @@ function RulesetEditor() {
     update('scoringProfiles.0.table', next);
   }
 
-  function addRow() {
+  /**
+   * Rows extend in both directions. Adding only at the worse end left no way to score an
+   * albatross, which is exactly the kind of thing a group's table has to be able to hold.
+   * The schema requires the rows to run consecutively, so each button steps one from an end.
+   */
+  function addWorseRow() {
     const rows = sortedTable(tableOf(draft));
     const worst = rows[rows.length - 1];
-    const relativeToPar = (worst?.relativeToPar ?? 0) + 1;
+    const relativeToPar = (worst?.relativeToPar ?? -1) + 1;
     update('scoringProfiles.0.table', [
       ...rows,
-      { relativeToPar, label: describeRelativeToPar(relativeToPar), points: 0 },
+      { relativeToPar, label: suggestedLabel(relativeToPar), points: 0 },
+    ]);
+  }
+
+  function addBetterRow() {
+    const rows = sortedTable(tableOf(draft));
+    const best = rows[0];
+    const relativeToPar = (best?.relativeToPar ?? 1) - 1;
+    update('scoringProfiles.0.table', [
+      { relativeToPar, label: suggestedLabel(relativeToPar), points: (best?.points ?? 0) + 1 },
+      ...rows,
     ]);
   }
 
@@ -231,11 +247,45 @@ function RulesetEditor() {
               </tbody>
             </table>
 
-            <button type="button" className="link-button" onClick={addRow}>
-              Add a row
-            </button>
+            <div className="row" style={{ marginTop: '0.5rem' }}>
+              <button type="button" className="link-button" onClick={addBetterRow}>
+                + better score
+              </button>
+              <button type="button" className="link-button" onClick={addWorseRow}>
+                + worse score
+              </button>
+            </div>
+            <p className="hint">
+              Rows have to run consecutively, so each button adds one step beyond an end.
+              Removing a row from the middle would leave a score with no value.
+            </p>
 
             <div className="field" style={{ marginTop: '1rem' }}>
+              <label htmlFor="better">Anything better than the table</label>
+              <select
+                id="better"
+                value={
+                  (profile?.['betterThanTable'] as { mode?: string } | undefined)?.mode ?? 'clamp'
+                }
+                onChange={(event) =>
+                  update(
+                    'scoringProfiles.0.betterThanTable',
+                    event.target.value === 'clamp'
+                      ? { mode: 'clamp' }
+                      : { mode: 'value', points: 0 },
+                  )
+                }
+              >
+                <option value="clamp">Scores the same as the best row</option>
+                <option value="value">Scores nothing</option>
+              </select>
+              <p className="hint">
+                A hole-in-one on a par 5 is four under. If your table stops at three under,
+                this decides what it is worth.
+              </p>
+            </div>
+
+            <div className="field">
               <label htmlFor="worse">Anything worse than the table</label>
               <select
                 id="worse"

@@ -149,4 +149,27 @@ export function describeRelativeToPar(relativeToPar: number): string {
   return `${Math.abs(relativeToPar)} under`;
 }
 
+/**
+ * Conventional names, offered only as a starting label for a new row.
+ *
+ * This is a display convenience, not a scoring rule: nothing here affects what a score is
+ * worth, and the planner renames any of them freely. A group that calls a birdie something
+ * else types that instead.
+ */
+const CONVENTIONAL_NAMES: Record<string, string> = {
+  '-4': 'Condor',
+  '-3': 'Albatross',
+  '-2': 'Eagle',
+  '-1': 'Birdie',
+  '0': 'Par',
+  '1': 'Bogey',
+  '2': 'Double Bogey',
+  '3': 'Triple Bogey',
+  '4': 'Quadruple Bogey',
+};
+
+export function suggestedLabel(relativeToPar: number): string {
+  return CONVENTIONAL_NAMES[String(relativeToPar)] ?? describeRelativeToPar(relativeToPar);
+}
+
 export type { Ruleset };

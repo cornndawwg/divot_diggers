@@ -47,7 +47,10 @@ const SOURCE_LABEL: Record<string, string> = {
 
 export default function RosterPage() {
   const [eventId, setEventId] = useState('');
-  const [eventName, setEventName] = useState('');
+  const [events, setEvents] = useState<{ id: string; name: string; year: number }[]>([]);
+  const [newEventName, setNewEventName] = useState('');
+  const [newEventYear, setNewEventYear] = useState(String(new Date().getFullYear()));
+  const [creatingEvent, setCreatingEvent] = useState(false);
   const [archive, setArchive] = useState<ArchivedPerson[]>([]);
   const [roster, setRoster] = useState<RosterPlayer[]>([]);
   const [balance, setBalance] = useState<Balance | null>(null);
@@ -72,16 +75,16 @@ export default function RosterPage() {
       setState('signed-out');
       return;
     }
-    const events = ((await eventsResponse.json()) as {
+    const loaded = ((await eventsResponse.json()) as {
       events: { id: string; name: string; year: number }[];
     }).events;
-    if (events.length === 0) {
+    setEvents(loaded);
+    if (loaded.length === 0) {
       setState('no-event');
       return;
     }
-    const active = id ?? events[0]?.id ?? '';
+    const active = id ?? loaded[0]?.id ?? '';
     setEventId(active);
-    setEventName(events.find((event) => event.id === active)?.name ?? '');
 
     const [archiveResponse, rosterResponse, balanceResponse] = await Promise.all([
       fetch(`${apiUrl}/api/people?eventId=${active}`, { credentials: 'include' }),
@@ -101,6 +104,33 @@ export default function RosterPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  async function createEvent() {
+    setMessage('');
+    setCreatingEvent(true);
+    const response = await fetch(`${apiUrl}/api/events`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: newEventName.trim(),
+        year: Number(newEventYear) || new Date().getFullYear(),
+      }),
+    });
+    setCreatingEvent(false);
+
+    if (response.status === 409) {
+      setMessage('Create your group first, on the Account page.');
+      return;
+    }
+    if (!response.ok) {
+      setMessage('Could not create the event.');
+      return;
+    }
+    const created = (await response.json()) as { id: string };
+    setNewEventName('');
+    await load(created.id);
+  }
 
   async function addToArchive() {
     if (newName.trim() === '') return;
@@ -203,13 +233,47 @@ export default function RosterPage() {
       </>
     );
   }
+  // An event is a trip: a name and a year, with a roster inside it. It is the first thing a
+  // planner makes, so it is made here rather than somewhere it has nothing to do with.
+  const eventForm = (
+    <div className="field">
+      <div className="row">
+        <input
+          value={newEventName}
+          onChange={(event) => setNewEventName(event.target.value)}
+          placeholder="Divot Diggers 2027"
+          aria-label="Event name"
+        />
+        <input
+          value={newEventYear}
+          onChange={(event) => setNewEventYear(event.target.value)}
+          inputMode="numeric"
+          aria-label="Year"
+          style={{ maxWidth: '6rem' }}
+        />
+        <button
+          type="button"
+          onClick={() => void createEvent()}
+          disabled={creatingEvent || newEventName.trim() === ''}
+        >
+          {creatingEvent ? 'Creating…' : 'Create'}
+        </button>
+      </div>
+    </div>
+  );
+
   if (state === 'no-event') {
     return (
       <>
-        <h1>No event yet</h1>
+        <h1>Set up your event</h1>
+        <p className="sub">A trip, with a roster inside it. Name it and pick the year.</p>
         <div className="card">
+          {message !== '' && <p className="error">{message}</p>}
+          {eventForm}
           <p className="note">
-            Create one from <Link href="/courses">Courses</Link>, then come back.
+            <Link href="/dashboard">Account</Link>
+            {' · '}
+            <Link href="/courses">Courses</Link>
           </p>
         </div>
       </>
@@ -222,8 +286,34 @@ export default function RosterPage() {
     <>
       <h1>Roster</h1>
       <p className="sub">
-        {eventName} · {roster.length} {roster.length === 1 ? 'player' : 'players'}
+        {roster.length} {roster.length === 1 ? 'player' : 'players'}
       </p>
+
+      <div className="card" style={{ marginBottom: '1rem' }}>
+        <div className="field">
+          <label htmlFor="event">Event</label>
+          <select
+            id="event"
+            value={eventId}
+            onChange={(changed) => {
+              setState('loading');
+              void load(changed.target.value);
+            }}
+          >
+            {events.map((event) => (
+              <option key={event.id} value={event.id}>
+                {event.name} ({event.year})
+              </option>
+            ))}
+          </select>
+        </div>
+        <details>
+          <summary className="hint" style={{ cursor: 'pointer' }}>
+            Add another event
+          </summary>
+          <div style={{ marginTop: '0.6rem' }}>{eventForm}</div>
+        </details>
+      </div>
 
       {balance !== null && balance.issues.length > 0 && (
         <div className="card" style={{ marginBottom: '1rem' }}>

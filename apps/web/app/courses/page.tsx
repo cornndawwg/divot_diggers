@@ -63,7 +63,7 @@ export default function CoursesPage() {
       });
       if (created.status === 409) {
         setBusy('');
-        setMessage('Create your group first, from your account page.');
+        setMessage('Create your group first, on the Account page.');
         return;
       }
       eventId = ((await created.json()) as { id: string }).id;
