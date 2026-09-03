@@ -169,3 +169,67 @@ describe('extending the points table to better scores', () => {
     }
   });
 });
+
+describe('how much of a round folds back into the target', () => {
+  /** What the editor's fold-back control produces: the amount and the timing together. */
+  function withFoldBack(factor: number): Record<string, unknown> {
+    const copy = structuredClone(REFERENCE) as {
+      competitions: Record<string, unknown>[];
+    };
+    const competition = copy.competitions.find((entry) => entry['type'] === 'individual_target');
+    if (competition === undefined) throw new Error('no target competition');
+    const target = competition['target'] as Record<string, unknown>;
+    target['adjustmentFactor'] = factor;
+    target['adjustBetweenRounds'] = factor > 0;
+    target['adjustAtEventEnd'] = factor > 0;
+    return copy as unknown as Record<string, unknown>;
+  }
+
+  it('moves the next target by the fraction chosen', () => {
+    // The card is +5 against a prorated target of 18, from a standing target of 36.
+    expect(previewOf(withFoldBack(0)).outcome.nextTarget).toBe(36);
+    expect(previewOf(withFoldBack(0.25)).outcome.nextTarget).toBe(37.25);
+    expect(previewOf(withFoldBack(0.5)).outcome.nextTarget).toBe(38.5);
+    expect(previewOf(withFoldBack(1)).outcome.nextTarget).toBe(41);
+  });
+
+  it('does nothing at all when the timing is switched off, whatever the amount', () => {
+    // The bug this guards: an amount without the timing is a silent no-op, and the editor
+    // used to let a planner set one without the other.
+    const amountWithoutTiming = structuredClone(REFERENCE) as {
+      competitions: Record<string, unknown>[];
+    };
+    const competition = amountWithoutTiming.competitions.find(
+      (entry) => entry['type'] === 'individual_target',
+    );
+    const target = competition?.['target'] as Record<string, unknown>;
+    target['adjustmentFactor'] = 0.5;
+    target['adjustBetweenRounds'] = false;
+
+    const preview = previewOf(amountWithoutTiming as unknown as Record<string, unknown>);
+    expect(preview.outcome.roundDelta).toBe(5);
+    expect(preview.outcome.nextTarget).toBe(36);
+  });
+
+  it('still adjusts at the end of an event when it does not adjust between rounds', () => {
+    const endOnly = structuredClone(REFERENCE) as { competitions: Record<string, unknown>[] };
+    const competition = endOnly.competitions.find(
+      (entry) => entry['type'] === 'individual_target',
+    );
+    const target = competition?.['target'] as Record<string, unknown>;
+    target['adjustBetweenRounds'] = false;
+    target['adjustAtEventEnd'] = true;
+
+    const ruleset = parseRuleset(endOnly as unknown as Record<string, unknown>);
+    const config = ruleset.competitions.find((entry) => entry.type === 'individual_target');
+    if (config?.type !== 'individual_target') throw new Error('no target competition');
+
+    const mid = applyRound(initialTargetState(36), 23, config.target, { holesInPlay: 9 });
+    const last = applyRound(initialTargetState(36), 23, config.target, {
+      holesInPlay: 9,
+      isFinalRound: true,
+    });
+    expect(mid.nextTarget).toBe(36);
+    expect(last.nextTarget).toBe(38.5);
+  });
+});

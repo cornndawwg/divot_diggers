@@ -60,6 +60,7 @@ function RulesetEditor() {
   const profile = profileOf(draft);
   const table = sortedTable(tableOf(draft));
   const competition = targetCompetitionOf(draft);
+  const targetValue = (competition?.['target'] ?? {}) as Record<string, unknown>;
 
   /**
    * Validate with the very schema the server uses. The planner sees the same objection they
@@ -101,6 +102,11 @@ function RulesetEditor() {
       total,
       cap: pickupCapRelativeToPar(scoringProfile),
       outcome,
+      adjusts:
+        targetCompetition?.type === 'individual_target'
+          ? targetCompetition.target.adjustmentFactor > 0 &&
+            targetCompetition.target.adjustBetweenRounds
+          : false,
       targetLabel:
         targetCompetition?.type === 'individual_target'
           ? targetCompetition.target.label
@@ -338,9 +344,7 @@ function RulesetEditor() {
                 <label htmlFor="target-label">What you call it</label>
                 <input
                   id="target-label"
-                  value={String(
-                    (competition['target'] as Record<string, unknown>)['label'] ?? '',
-                  )}
+                  value={String(targetValue['label'] ?? '')}
                   onChange={(event) => {
                     const index = (draft['competitions'] as unknown[]).indexOf(competition);
                     update(`competitions.${index}.target.label`, event.target.value);
@@ -354,15 +358,22 @@ function RulesetEditor() {
                 </label>
                 <select
                   id="factor"
-                  value={String(
-                    (competition['target'] as Record<string, unknown>)['adjustmentFactor'] ?? 0,
-                  )}
+                  value={String(targetValue['adjustmentFactor'] ?? 0)}
                   onChange={(event) => {
-                    const index = (draft['competitions'] as unknown[]).indexOf(competition);
-                    update(
-                      `competitions.${index}.target.adjustmentFactor`,
-                      Number(event.target.value),
-                    );
+                    // The amount and the timing are two settings, and an amount with the
+                    // timing switched off does nothing at all. Setting one sets the other,
+                    // so this control cannot be a silent no-op.
+                    const factor = Number(event.target.value);
+                    setDraft((current) => {
+                      const index = (current['competitions'] as unknown[]).findIndex(
+                        (entry) =>
+                          (entry as Record<string, unknown>)['type'] === 'individual_target',
+                      );
+                      let next = setPath(current, `competitions.${index}.target.adjustmentFactor`, factor);
+                      next = setPath(next, `competitions.${index}.target.adjustBetweenRounds`, factor > 0);
+                      next = setPath(next, `competitions.${index}.target.adjustAtEventEnd`, factor > 0);
+                      return next;
+                    });
                   }}
                 >
                   <option value="0">None — the target never moves</option>
@@ -372,13 +383,39 @@ function RulesetEditor() {
                 </select>
               </div>
 
+              {Number(targetValue['adjustmentFactor'] ?? 0) > 0 && (
+                <div className="field">
+                  <label htmlFor="when">And when it moves</label>
+                  <select
+                    id="when"
+                    value={targetValue['adjustBetweenRounds'] === true ? 'each' : 'end'}
+                    onChange={(event) => {
+                      const between = event.target.value === 'each';
+                      setDraft((current) => {
+                        const index = (current['competitions'] as unknown[]).findIndex(
+                          (entry) =>
+                            (entry as Record<string, unknown>)['type'] === 'individual_target',
+                        );
+                        let next = setPath(current, `competitions.${index}.target.adjustBetweenRounds`, between);
+                        next = setPath(next, `competitions.${index}.target.adjustAtEventEnd`, true);
+                        return next;
+                      });
+                    }}
+                  >
+                    <option value="each">After every round</option>
+                    <option value="end">Only at the end of the event</option>
+                  </select>
+                  <p className="hint">
+                    Adjusting after every round means a good morning makes the afternoon harder.
+                  </p>
+                </div>
+              )}
+
               <div className="field">
                 <label htmlFor="carry">Between one year and the next</label>
                 <select
                   id="carry"
-                  value={String(
-                    (competition['target'] as Record<string, unknown>)['carryover'] ?? 'none',
-                  )}
+                  value={String(targetValue['carryover'] ?? 'none')}
                   onChange={(event) => {
                     const index = (draft['competitions'] as unknown[]).indexOf(competition);
                     update(`competitions.${index}.target.carryover`, event.target.value);
@@ -396,9 +433,7 @@ function RulesetEditor() {
                   type="number"
                   min={1}
                   max={36}
-                  value={Number(
-                    (competition['target'] as Record<string, unknown>)['holesPerFullRound'] ?? 18,
-                  )}
+                  value={Number(targetValue['holesPerFullRound'] ?? 18)}
                   onChange={(event) => {
                     const index = (draft['competitions'] as unknown[]).indexOf(competition);
                     update(
@@ -501,6 +536,12 @@ function RulesetEditor() {
                       <dt>Next {preview.targetLabel.toLowerCase()}</dt>
                       <dd>{preview.outcome.nextTarget}</dd>
                     </dl>
+                    {!preview.adjusts && (
+                      <p className="hint" style={{ marginTop: '0.5rem' }}>
+                        The {preview.targetLabel.toLowerCase()} does not move after a round
+                        under these rules, so it stays at {preview.outcome.nextTarget}.
+                      </p>
+                    )}
                   </>
                 )}
               </>
