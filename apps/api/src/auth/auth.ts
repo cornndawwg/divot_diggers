@@ -41,6 +41,21 @@ export function createAuth(options: AuthOptions) {
     emailVerification: {
       sendOnSignUp: true,
       autoSignInAfterVerification: true,
+      /**
+       * Link the credential to a golfer only once the address is verified.
+       *
+       * A planner can add someone to the archive before that person has an account, so a
+       * `people` row with their email may already exist carrying a rating history. Claiming
+       * it at sign-up would hand that history to anyone who typed a known address; claiming
+       * it here happens only after control of the address is proven.
+       */
+      async afterEmailVerification(user) {
+        await pool.query('SELECT claim_person_for_auth_user($1, $2, $3)', [
+          user.id,
+          user.email,
+          user.name === '' ? user.email : user.name,
+        ]);
+      },
       async sendVerificationEmail({ user, token }) {
         // Build the link rather than using the supplied `url`, whose callbackURL defaults
         // to "/" — that would land the golfer on the API, which serves no pages. Send them
@@ -58,22 +73,7 @@ export function createAuth(options: AuthOptions) {
       additionalFields: {},
     },
 
-    databaseHooks: {
-      user: {
-        create: {
-          async after(user) {
-            // The privileged path that migration 0003 requires: create the domain
-            // identity for a newly registered credential.
-            await pool.query(
-              `INSERT INTO people (auth_user_id, display_name, email)
-               VALUES ($1, $2, $3)
-               ON CONFLICT (auth_user_id) DO NOTHING`,
-              [user.id, user.name === '' ? user.email : user.name, user.email],
-            );
-          },
-        },
-      },
-    },
+    databaseHooks: {},
 
     advanced: {
       // Cross-origin during development: the console runs on :3000, the API on :8787.

@@ -145,7 +145,7 @@ describe('the guarantees the migrations carry', () => {
     expect(rows[0]?.count).toBe('0');
   });
 
-  it('carries 31 policies, and accounts for every one', async () => {
+  it('carries 35 policies, and accounts for every one', async () => {
     const { rows } = await pool.query<{ count: string }>(
       "SELECT count(*) FROM pg_policies WHERE schemaname = 'public'",
     );
@@ -153,7 +153,36 @@ describe('the guarantees the migrations carry', () => {
     //   0003  person_read, person_update_self
     //   0004  auth_owner_only on each of the four credential tables
     //   0005  course_write, course_update, round_write, round_update
-    expect(rows[0]?.count).toBe('31');
+    //   0006  event_player_write, event_player_update, event_role_write, rating_write
+    expect(rows[0]?.count).toBe('35');
+  });
+
+  it('gives the roster write paths a policy each', async () => {
+    const { rows } = await pool.query<{ policyname: string; cmd: string }>(
+      `SELECT policyname, cmd FROM pg_policies
+        WHERE schemaname = 'public'
+          AND policyname IN ('event_player_write','event_player_update','event_role_write','rating_write')
+        ORDER BY policyname`,
+    );
+    expect(rows).toEqual([
+      { policyname: 'event_player_update', cmd: 'UPDATE' },
+      { policyname: 'event_player_write', cmd: 'INSERT' },
+      { policyname: 'event_role_write', cmd: 'INSERT' },
+      { policyname: 'rating_write', cmd: 'INSERT' },
+    ]);
+  });
+
+  it('bootstraps the archive and the claim path through definer functions', async () => {
+    const { rows } = await pool.query<{ proname: string; prosecdef: boolean }>(
+      `SELECT proname, prosecdef FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public'
+          AND proname IN ('add_org_person','claim_person_for_auth_user')
+        ORDER BY proname`,
+    );
+    expect(rows).toEqual([
+      { proname: 'add_org_person', prosecdef: true },
+      { proname: 'claim_person_for_auth_user', prosecdef: true },
+    ]);
   });
 
   it('gives the planner write paths a policy each', async () => {

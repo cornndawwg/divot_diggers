@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ddga/scoring-engine": "workspace:*",
     "@ddga/types": "workspace:*",
     "@hono/node-server": "^2.1.1",
     "better-auth": "^1.7.2",

@@ -20,6 +20,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@ddga/scoring-engine':
+        specifier: workspace:*
+        version: link:../../packages/scoring-engine
       '@ddga/types':
         specifier: workspace:*
         version: link:../../packages/types

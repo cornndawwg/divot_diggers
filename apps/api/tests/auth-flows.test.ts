@@ -70,20 +70,14 @@ describe('signing up', () => {
     expect(sent[0]?.subject).toBe('Confirm your email address');
   });
 
-  it('creates the golfer profile linked to the credential', async () => {
-    const { rows } = await harness.privilegedPool.query<{
-      display_name: string;
-      email: string;
-      auth_user_id: string;
-    }>('SELECT display_name, email, auth_user_id FROM people WHERE email = $1', [email]);
-    expect(rows[0]?.display_name).toBe('Justin Crumpler');
-    expect(rows[0]?.auth_user_id).toBeTruthy();
-
-    const linked = await harness.privilegedPool.query<{ count: string }>(
-      'SELECT count(*) FROM "user" u JOIN people p ON p.auth_user_id = u.id WHERE u.email = $1',
+  it('creates no golfer profile until the address is verified', async () => {
+    // Claiming at sign-up would hand an archived golfer's rating history to anyone who
+    // typed their address. Nothing is linked until control of the address is proven.
+    const { rows } = await harness.privilegedPool.query<{ count: string }>(
+      'SELECT count(*) FROM people WHERE email = $1',
       [email],
     );
-    expect(linked.rows[0]?.count).toBe('1');
+    expect(rows[0]?.count).toBe('0');
   });
 
   it('refuses to sign in before the address is verified', async () => {
@@ -107,7 +101,8 @@ describe('signing up', () => {
       'SELECT count(*) FROM people WHERE email = $1',
       [email],
     );
-    expect(people.rows[0]?.count).toBe('1');
+    // Still none: neither sign-up created a golfer, because neither verified.
+    expect(people.rows[0]?.count).toBe('0');
   });
 
   it('refuses a password under ten characters', async () => {
@@ -152,6 +147,16 @@ describe('verifying by email', () => {
       [email],
     );
     expect(rows[0]?.emailVerified).toBe(true);
+  });
+
+  it('creates the golfer profile once verified', async () => {
+    const { rows } = await harness.privilegedPool.query<{
+      display_name: string;
+      auth_user_id: string;
+    }>('SELECT display_name, auth_user_id FROM people WHERE email = $1', [email]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.display_name).toBe('Casey Wheeler');
+    expect(rows[0]?.auth_user_id).toBeTruthy();
   });
 
   it('then allows sign in', async () => {
@@ -359,5 +364,80 @@ describe('the credential tables are unreachable from the app connection', () => 
       );
       expect(rows[0]?.count, table).toBe('0');
     }
+  });
+});
+
+describe('claiming an archived golfer', () => {
+  // The planner adds someone to the archive years before they ever open the app. When they
+  // do sign up, they must inherit that golfer rather than start a second, empty history.
+  const email = 'archived@example.com';
+  let archivedPersonId = '';
+  let orgId = '';
+
+  beforeAll(async () => {
+    const org = await harness.privilegedPool.query<{ id: string }>(
+      `INSERT INTO organizations (name, slug) VALUES ('Archive Test','archive-test') RETURNING id`,
+    );
+    orgId = org.rows[0]?.id ?? '';
+
+    const person = await harness.privilegedPool.query<{ id: string }>(
+      `INSERT INTO people (display_name, email, phone)
+       VALUES ('Kenny Adkins', $1, '555-0142') RETURNING id`,
+      [email],
+    );
+    archivedPersonId = person.rows[0]?.id ?? '';
+    await harness.privilegedPool.query(
+      `INSERT INTO org_members (org_id, person_id, role) VALUES ($1,$2,'member')`,
+      [orgId, archivedPersonId],
+    );
+    // A rating history that must survive the claim.
+    await harness.privilegedPool.query(
+      `INSERT INTO player_ratings (org_id, person_id, competition_key, raw_value, rounded_value, reason)
+       VALUES ($1,$2,'dogfight',14.375,14,'event_carryover')`,
+      [orgId, archivedPersonId],
+    );
+  });
+
+  it('has an archived golfer with no account', async () => {
+    const { rows } = await harness.privilegedPool.query<{ auth_user_id: string | null }>(
+      'SELECT auth_user_id FROM people WHERE id = $1',
+      [archivedPersonId],
+    );
+    expect(rows[0]?.auth_user_id).toBeNull();
+  });
+
+  it('claims that exact golfer on verification, creating no duplicate', async () => {
+    await signUp(email, 'Kenny A');
+    await visit(linkFrom(harness.mailer.lastTo(email)?.text ?? ''));
+
+    const { rows } = await harness.privilegedPool.query<{
+      id: string;
+      display_name: string;
+      phone: string | null;
+      auth_user_id: string | null;
+    }>('SELECT id, display_name, phone, auth_user_id FROM people WHERE email = $1', [email]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.id).toBe(archivedPersonId);
+    expect(rows[0]?.auth_user_id).toBeTruthy();
+    // The planner's record wins over the name typed at sign-up.
+    expect(rows[0]?.display_name).toBe('Kenny Adkins');
+    expect(rows[0]?.phone).toBe('555-0142');
+  });
+
+  it('keeps the rating history that was already on file', async () => {
+    const { rows } = await harness.privilegedPool.query<{ rounded_value: number }>(
+      'SELECT rounded_value FROM player_ratings WHERE person_id = $1',
+      [archivedPersonId],
+    );
+    expect(rows.map((row) => row.rounded_value)).toEqual([14]);
+  });
+
+  it('shows the claimed golfer as themselves through the API', async () => {
+    const cookies = cookiesFrom(await signIn(email));
+    const response = await harness.request('/api/me', { cookies });
+    const body = (await response.json()) as { id: string; displayName: string };
+    expect(body.id).toBe(archivedPersonId);
+    expect(body.displayName).toBe('Kenny Adkins');
   });
 });

@@ -77,7 +77,15 @@ export function suggestLapsedPlayerPtp(
     suggestedPtp,
     requiresPlannerConfirmation: requirePlannerConfirmation,
     plannerMayEditSuggestion,
-    explanation: explain(input, method, handicapDelta, adjustment, suggestedPtp, capBit),
+    explanation: explain(
+      input,
+      method,
+      handicapDelta,
+      adjustment,
+      suggestedPtp,
+      capBit,
+      requirePlannerConfirmation,
+    ),
   };
 }
 
@@ -88,7 +96,11 @@ function explain(
   adjustment: number,
   suggestedPtp: number,
   capped: boolean,
+  requiresConfirmation: boolean,
 ): string {
+  // Whether the number moved or not, say who decides. A suggestion the planner is expected
+  // to confirm should never read like a decision already taken.
+  const confirmation = requiresConfirmation ? ' The planner confirms this.' : '';
   const absence =
     input.eventsMissed === 1 ? 'after missing one event' : `after missing ${input.eventsMissed} events`;
 
@@ -97,7 +109,7 @@ function explain(
   }
 
   if (method === 'carry_unchanged' || adjustment === 0) {
-    return `Returning ${absence} on a target of ${input.lastPtp}, with no handicap movement to account for, so the target carries unchanged.`;
+    return `Returning ${absence} on a target of ${input.lastPtp}, with no handicap movement to account for, so the target carries unchanged.${confirmation}`;
   }
 
   const movement =
@@ -107,5 +119,5 @@ function explain(
   const direction = adjustment > 0 ? 'up' : 'down';
   const cap = capped ? ', capped by the ruleset' : '';
 
-  return `Returning ${absence} on a target of ${input.lastPtp}, now ${movement} than at their last appearance, so the target moves ${direction} by ${Math.abs(adjustment)}${cap} to ${suggestedPtp}. The planner confirms this.`;
+  return `Returning ${absence} on a target of ${input.lastPtp}, now ${movement} than at their last appearance, so the target moves ${direction} by ${Math.abs(adjustment)}${cap} to ${suggestedPtp}.${confirmation}`;
 }

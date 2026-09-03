@@ -148,6 +148,8 @@ export default function CoursesPage() {
         <p className="note">
           <Link href="/courses/new">Add a course</Link>
           {' · '}
+          <Link href="/roster">Roster</Link>
+          {" · "}
           <Link href="/rounds">Rounds</Link>
           {' · '}
           <Link href="/dashboard">Account</Link>
