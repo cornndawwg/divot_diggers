@@ -28,11 +28,19 @@ const expectedPtp = new Map(
  * explain any number later.
  */
 
-/** Handicap indexes from docs/rules-engine-spec.md 1.3a. */
-const DOCUMENTED_INDEXES: Record<string, number> = {
+/**
+ * Handicap indexes on file.
+ *
+ * The first three are recorded in docs/rules-engine-spec.md 1.3a. Jeff Johnson's 19 came
+ * from the planner's memory, which makes it the strongest of the four: nobody derived it
+ * from the fixture, and 54 − 19 lands on the fixture's 35 exactly. An independent input
+ * reproducing a golden value is better evidence than a documented one.
+ */
+const KNOWN_INDEXES: Record<string, number> = {
   'Mike Sinkule': 6.4,
   'Lee Butler': 20.0,
   'Shay Shamburger': 38.0,
+  'Jeff Johnson': 19.0,
 };
 
 /** Carried values, recomputed from the 2025 rounds rather than copied. */
@@ -65,8 +73,8 @@ describe('building the 2026 event roster', () => {
     }
   });
 
-  it('seeds three players from the handicap indexes the spec records', () => {
-    for (const [player, index] of Object.entries(DOCUMENTED_INDEXES)) {
+  it('seeds four players from the handicap indexes on file', () => {
+    for (const [player, index] of Object.entries(KNOWN_INDEXES)) {
       const seeded = seedFromHandicap(index, target);
       expect(seeded.source).toBe('seeded_from_handicap');
       expect(seeded.value, player).toBe(expectedPtp.get(player));
@@ -76,12 +84,21 @@ describe('building the 2026 event roster', () => {
     expect(seedFromHandicap(6.4, target).value).toBe(48);
   });
 
+  it('reproduces a starting target from a handicap remembered independently', () => {
+    // 19 was recalled from memory, not read from the fixture. 54 − 19 = 35, and the
+    // fixture's 2026 value for Jeff Johnson is 35.
+    const seeded = seedFromHandicap(19, target);
+    expect(seeded.raw).toBe(35);
+    expect(seeded.value).toBe(35);
+    expect(expectedPtp.get('Jeff Johnson')).toBe(35);
+  });
+
   it('reproduces all 24 starting targets, and labels where each came from', () => {
     const seeded = roster2026.map((entry) => {
       const raw = carried.get(entry.player);
       if (raw !== undefined) return { player: entry.player, ...carriedStartingTarget(raw, target) };
 
-      const index = DOCUMENTED_INDEXES[entry.player];
+      const index = KNOWN_INDEXES[entry.player];
       if (index !== undefined) {
         return { player: entry.player, ...seedFromHandicap(index, target) };
       }
@@ -100,8 +117,8 @@ describe('building the 2026 event roster', () => {
       counts[entry.source] = (counts[entry.source] ?? 0) + 1;
       return counts;
     }, {});
-    // 15 of the 24 are genuinely derived; the other 9 are planner-entered.
-    expect(bySource).toEqual({ carried: 12, seeded_from_handicap: 3, manual: 9 });
+    // 16 of the 24 are genuinely derived; the other 8 have no index on file.
+    expect(bySource).toEqual({ carried: 12, seeded_from_handicap: 4, manual: 8 });
   });
 
   it('explains each number in a sentence a planner can read', () => {
