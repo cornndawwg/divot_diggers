@@ -70,16 +70,22 @@ describe('the test connection is genuinely unprivileged', () => {
     expect(rows[0]?.rolbypassrls).toBe(false);
   });
 
-  it('can delete from exactly the two roster tables and nowhere else', async () => {
-    // A stray DELETE grant is how history quietly disappears. Ratings are append-only,
-    // archive removal is soft, and scores are never deleted by the app at all.
+  it('can delete from exactly three tables and nowhere else', async () => {
+    // A stray DELETE grant is how history quietly disappears. Two of these are roster
+    // entries; the third is the derived results cache, which is rebuilt from scorecards and
+    // so loses nothing when cleared. Ratings are append-only, archive removal is soft, and
+    // scores are never deleted by the app at all.
     const { rows } = await database.owner.query<{ table_name: string }>(
       `SELECT DISTINCT table_name FROM information_schema.role_table_grants
         WHERE grantee = $1 AND privilege_type = 'DELETE' AND table_schema = 'public'
         ORDER BY table_name`,
       [database.appUserRole],
     );
-    expect(rows.map((row) => row.table_name)).toEqual(['event_players', 'event_roles']);
+    expect(rows.map((row) => row.table_name)).toEqual([
+      'dogfight_results',
+      'event_players',
+      'event_roles',
+    ]);
   });
 
   it('is refused outright when it tries to delete a score', async () => {

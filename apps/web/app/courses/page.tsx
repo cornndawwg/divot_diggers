@@ -151,6 +151,8 @@ export default function CoursesPage() {
           <Link href="/courses/new/card">Type in a scorecard</Link>
           {' · '}
           <Link href="/roster">Roster</Link>
+          {' · '}
+          <Link href="/standings">Standings</Link>
           {" · "}
           <Link href="/rounds">Rounds</Link>
           {' · '}

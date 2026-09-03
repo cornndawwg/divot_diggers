@@ -45,10 +45,10 @@ echo "Granting it the privileges the API needs"
 psql "$DATABASE_URL" -qtAc "GRANT USAGE ON SCHEMA public TO ${ROLE}" >/dev/null || exit 1
 psql "$DATABASE_URL" -qtAc "GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO ${ROLE}" >/dev/null || exit 1
 psql "$DATABASE_URL" -qtAc "GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO ${ROLE}" >/dev/null || exit 1
-# DELETE on exactly two tables and nowhere else: taking someone off a roster. Everything
-# else is append-only or soft-deleted by design, and a stray DELETE grant is how history
-# quietly disappears.
-psql "$DATABASE_URL" -qtAc "GRANT DELETE ON event_players, event_roles TO ${ROLE}" >/dev/null || exit 1
+# DELETE on three tables only. Two are roster entries, taken off when someone drops out. The
+# third is the derived results cache, rebuilt from scorecards and so lossless to clear.
+# Scores and ratings are never deleted by the app.
+psql "$DATABASE_URL" -qtAc "GRANT DELETE ON event_players, event_roles, dogfight_results TO ${ROLE}" >/dev/null || exit 1
 
 # Rewrite APP_DATABASE_URL in .env, in place, without disturbing anything else.
 APP_URL="${BASE/\/\/*@//\/${ROLE}:${APP_PASSWORD}@}"

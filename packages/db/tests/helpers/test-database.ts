@@ -77,8 +77,10 @@ export async function createTestDatabase(name: string): Promise<TestDatabase> {
   await owner.query(`GRANT USAGE ON SCHEMA public TO ${role}`);
   await owner.query(`GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO ${role}`);
   await owner.query(`GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO ${role}`);
-  // Removing someone from a roster, and nothing else. Matches scripts/setup-dev-db.sh.
-  await owner.query(`GRANT DELETE ON event_players, event_roles TO ${role}`);
+  // DELETE on three tables only. Two are roster entries, taken off when someone drops out.
+  // The third is the derived results cache, which is rebuilt from scorecards and so loses
+  // nothing when cleared. Scores and ratings are never deleted by the app.
+  await owner.query(`GRANT DELETE ON event_players, event_roles, dogfight_results TO ${role}`);
 
   const appUser = new Pool({ connectionString: urlFor(name, { name: role, password }) });
 

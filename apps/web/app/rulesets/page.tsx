@@ -86,6 +86,8 @@ export default function RulesetsPage() {
           {' · '}
           <Link href="/roster">Roster</Link>
           {' · '}
+          <Link href="/standings">Standings</Link>
+          {' · '}
           <Link href="/dashboard">Account</Link>
         </p>
       </div>

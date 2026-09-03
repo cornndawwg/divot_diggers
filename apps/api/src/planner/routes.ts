@@ -23,6 +23,13 @@ import {
   type StartingTarget,
 } from '@ddga/scoring-engine';
 import { CourseImportRejected, importCourse } from '../courses/import.ts';
+import { computeStandings, rebuildResults } from '../scoring/standings.ts';
+
+/**
+ * Stamped onto every cached result. A bug fix in the engine changes numbers, and the archive
+ * has to say which code produced which row — see docs/rules-engine-spec.md 1.4.
+ */
+const ENGINE_VERSION = '1.0.0';
 
 export interface PlannerDeps {
   readonly auth: Auth;
@@ -321,12 +328,20 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
     }
   }
 
-  async function targetConfigFor(client: PoolClient, eventId: string): Promise<Target | null> {
+  async function targetCompetitionFor(
+    client: PoolClient,
+    eventId: string,
+  ): Promise<IndividualTargetCompetition | null> {
     const ruleset = await rulesetFor(client, eventId);
-    const competition = ruleset?.competitions.find(
-      (entry): entry is IndividualTargetCompetition => entry.type === 'individual_target',
+    return (
+      ruleset?.competitions.find(
+        (entry): entry is IndividualTargetCompetition => entry.type === 'individual_target',
+      ) ?? null
     );
-    return competition?.target ?? null;
+  }
+
+  async function targetConfigFor(client: PoolClient, eventId: string): Promise<Target | null> {
+    return (await targetCompetitionFor(client, eventId))?.target ?? null;
   }
 
   async function cupConfigFor(
@@ -979,11 +994,146 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
     return c.json(result.value);
   });
 
+  // --- scores and standings ------------------------------------------------
+
+  /**
+   * Enter a whole round as points totals, with no hole detail.
+   *
+   * This is the backfill path: nine years of history exist only as totals, and demanding a
+   * hole-by-hole card for a round played in 2019 would mean never entering it. The scorecard
+   * records `totals_only` so it is never mistaken for a card that was actually kept.
+   */
+  app.post('/api/rounds/:id/totals', async (c) => {
+    const roundId = c.req.param('id');
+    const body = (await c.req.json().catch(() => ({}))) as { totals?: unknown };
+    const totals = Array.isArray(body.totals) ? body.totals : null;
+    if (totals === null) {
+      return c.json({ error: 'Send a list of totals, one per player.' }, 400);
+    }
+
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const event = await client.query<{ event_id: string }>(
+        'SELECT event_id FROM rounds WHERE id = $1',
+        [roundId],
+      );
+      const eventId = event.rows[0]?.event_id;
+      if (eventId === undefined) return { kind: 'no-round' as const };
+
+      let written = 0;
+      await client.query('BEGIN');
+      try {
+        for (const entry of totals) {
+          const row = entry as { personId?: unknown; pointsPulled?: unknown; didNotPlay?: unknown };
+          const personId = typeof row.personId === 'string' ? row.personId : null;
+          if (personId === null) continue;
+
+          const didNotPlay = row.didNotPlay === true;
+          const points =
+            typeof row.pointsPulled === 'number' && Number.isFinite(row.pointsPulled)
+              ? Math.trunc(row.pointsPulled)
+              : null;
+          if (!didNotPlay && points === null) continue;
+
+          const player = await client.query<{ id: string }>(
+            'SELECT id FROM event_players WHERE event_id = $1 AND person_id = $2',
+            [eventId, personId],
+          );
+          const eventPlayerId = player.rows[0]?.id;
+          if (eventPlayerId === undefined) continue;
+
+          await client.query(
+            `INSERT INTO scorecards
+               (round_id, event_player_id, status, did_not_play, entry_mode, points_pulled_manual, submitted_at)
+             VALUES ($1,$2,'submitted',$3,'totals_only',$4, now())
+             ON CONFLICT (round_id, event_player_id) DO UPDATE
+               SET status = 'submitted',
+                   did_not_play = excluded.did_not_play,
+                   entry_mode = 'totals_only',
+                   points_pulled_manual = excluded.points_pulled_manual,
+                   submitted_at = now()`,
+            [roundId, eventPlayerId, didNotPlay, didNotPlay ? null : points],
+          );
+          written += 1;
+        }
+        await client.query(
+          `UPDATE rounds SET status = 'completed' WHERE id = $1 AND status <> 'completed'`,
+          [roundId],
+        );
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      }
+
+      // Rebuild the cache so the leaderboard is right immediately.
+      const competition = await targetCompetitionFor(client, eventId);
+      if (competition !== null) {
+        await rebuildResults(client, eventId, competition, ENGINE_VERSION);
+      }
+      return { kind: 'saved' as const, written };
+    });
+
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (result.value.kind === 'no-round') return c.json({ error: 'No such round.' }, 404);
+    return c.json({ saved: result.value.written });
+  });
+
+  /** The leaderboard, computed from the scores rather than read from the cache. */
+  app.get('/api/events/:id/standings', async (c) => {
+    const eventId = c.req.param('id');
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const competition = await targetCompetitionFor(client, eventId);
+      if (competition === null) return null;
+
+      const { rounds, results } = await computeStandings(client, eventId, competition);
+      const ordered = [...results].sort((a, b) => {
+        if (a.position !== null && b.position !== null) return a.position - b.position;
+        return b.event.finalStanding - a.event.finalStanding;
+      });
+
+      return {
+        label: competition.target.abbreviation,
+        rounds: rounds.map((round) => ({
+          id: round.id,
+          key: round.key,
+          name: round.name,
+          holesInPlay: round.holesInPlay,
+        })),
+        standings: ordered.map((entry) => ({
+          personId: entry.player.personId,
+          displayName: entry.player.displayName,
+          startingPtp: entry.player.startingPtp,
+          position: entry.position,
+          tied: entry.tied,
+          disqualified: !entry.eligibility.eligible,
+          disqualifiedBecause: entry.eligibility.reason,
+          finalStanding: entry.event.finalStanding,
+          carryoverRaw: entry.event.carryoverRaw,
+          carryoverRounded: entry.event.carryoverRounded,
+          rounds: entry.event.rounds.map((round) => ({
+            target: round.effectiveTarget,
+            pointsPulled: round.pointsPulled,
+            roundDelta: round.roundDelta,
+            runningTotal: round.runningTotal,
+            didNotPlay: round.didNotPlay,
+          })),
+        })),
+      };
+    });
+
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (result.value === null) {
+      return c.json({ error: 'This event has no individual competition configured.' }, 409);
+    }
+    return c.json(result.value);
+  });
+
   app.post('/api/rounds', async (c) => {
     const body = (await c.req.json().catch(() => ({}))) as {
       eventId?: unknown;
       courseId?: unknown;
       teeSetId?: unknown;
+      key?: unknown;
       name?: unknown;
       holeSelection?: unknown;
     };
@@ -1033,13 +1183,20 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
       );
       const sequence = next.rows[0]?.next ?? 1;
 
+      // The key ties this round to a round id in the ruleset, which is what says which
+      // competitions it feeds. Without it a round is scored by nothing.
+      const key =
+        typeof body.key === 'string' && body.key.trim() !== ''
+          ? body.key.trim()
+          : `round-${sequence}`;
+
       const { rows } = await client.query<{ id: string; key: string }>(
         `INSERT INTO rounds (event_id, key, name, sequence, course_id, tee_set_id, hole_selection, status)
          VALUES ($1,$2,$3,$4,$5,$6,$7,'in_progress')
          RETURNING id, key`,
         [
           eventId,
-          `round-${sequence}`,
+          key,
           name,
           sequence,
           courseId,

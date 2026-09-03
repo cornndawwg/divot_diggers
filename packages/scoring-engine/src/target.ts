@@ -170,22 +170,39 @@ export function applyRound(
   };
 }
 
+export interface ApplyRoundsOptions {
+  /**
+   * Holes played in each round, in round order. Only used when the ruleset prorates. Rounds
+   * within one event need not be the same length: a group may play eighteen in the morning
+   * and nine in the afternoon.
+   */
+  readonly holesInPlay?: readonly number[];
+}
+
 /** Run a player's whole event, from their starting target through to their carry-over value. */
 export function applyRounds(
   startingTarget: number,
   pointsPulled: readonly RoundInput[],
   config: Target,
+  options: ApplyRoundsOptions = {},
 ): PlayerEventResult {
   if (pointsPulled.length === 0) {
     throw new ScoringInputError('A player event needs at least one round of points.');
+  }
+  if (options.holesInPlay !== undefined && options.holesInPlay.length !== pointsPulled.length) {
+    throw new ScoringInputError(
+      `holesInPlay has ${options.holesInPlay.length} entries for ${pointsPulled.length} rounds.`,
+    );
   }
 
   let state = initialTargetState(startingTarget);
   const rounds: RoundOutcome[] = [];
 
   pointsPulled.forEach((pulled, index) => {
+    const holes = options.holesInPlay?.[index];
     const outcome = applyRound(state, pulled, config, {
       isFinalRound: index === pointsPulled.length - 1,
+      ...(holes === undefined ? {} : { holesInPlay: holes }),
     });
     rounds.push(outcome);
     state = outcome.next;

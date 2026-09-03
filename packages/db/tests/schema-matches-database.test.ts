@@ -145,7 +145,7 @@ describe('the guarantees the migrations carry', () => {
     expect(rows[0]?.count).toBe('0');
   });
 
-  it('carries 38 policies, and accounts for every one', async () => {
+  it('carries 43 policies, and accounts for every one', async () => {
     const { rows } = await pool.query<{ count: string }>(
       "SELECT count(*) FROM pg_policies WHERE schemaname = 'public'",
     );
@@ -155,7 +155,9 @@ describe('the guarantees the migrations carry', () => {
     //   0005  course_write, course_update, round_write, round_update
     //   0006  event_player_write, event_player_update, event_role_write, rating_write
     //   0008  event_player_delete, event_role_delete, member_update
-    expect(rows[0]?.count).toBe('38');
+    //   0010  scorecard_write, scorecard_update, dogfight_result_write,
+    //         dogfight_result_update, dogfight_result_delete
+    expect(rows[0]?.count).toBe('43');
   });
 
   it('protects a scored player from being deleted', async () => {

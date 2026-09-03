@@ -274,6 +274,8 @@ export default function RosterPage() {
             <Link href="/dashboard">Account</Link>
             {' · '}
             <Link href="/courses">Courses</Link>
+          {' · '}
+          <Link href="/standings">Standings</Link>
           </p>
         </div>
       </>
