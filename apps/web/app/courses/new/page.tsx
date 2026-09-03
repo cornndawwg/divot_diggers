@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { apiUrl } from '../../../lib/auth-client';
 
@@ -138,6 +139,10 @@ export default function NewCoursePage() {
         <button type="button" onClick={save} disabled={busy}>
           {busy ? 'Saving…' : `Save ${holeCount}-hole course`}
         </button>
+        <p className="note">
+          Need stroke indexes, yardages or several tee sets?{' '}
+          <Link href="/courses/new/card">Type in the whole scorecard</Link>.
+        </p>
       </div>
     </>
   );

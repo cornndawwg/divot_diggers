@@ -119,3 +119,19 @@ table.points button.danger { padding: 0.3rem 0.5rem; font-size: 1rem; line-heigh
 dl.outcome { display: grid; grid-template-columns: auto auto; gap: 0.3rem 1rem; margin: 0.5rem 0 0; }
 dl.outcome dt { font-size: 0.8rem; color: var(--muted); }
 dl.outcome dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+
+/* --- Full scorecard entry. Wide, so it scrolls on a phone rather than wrapping. --- */
+table.scorecard { border-collapse: collapse; font-size: 0.85rem; min-width: 100%; }
+table.scorecard th {
+  text-align: left; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--muted); font-weight: 700; padding: 0 0.3rem 0.3rem; white-space: nowrap;
+}
+table.scorecard td { padding: 0.1rem 0.3rem; }
+table.scorecard td.rel { color: var(--muted); font-variant-numeric: tabular-nums; }
+table.scorecard td.score { font-weight: 700; font-variant-numeric: tabular-nums; }
+table.scorecard input.tiny {
+  width: 3.2rem; margin: 0; padding: 0.35rem 0.4rem; text-align: center;
+  font-size: 0.9rem; font-variant-numeric: tabular-nums;
+}
+table.scorecard input.tiny.wide { width: 4.2rem; }
+table.scorecard tfoot td { border-top: 1px solid var(--line); padding-top: 0.4rem; }
