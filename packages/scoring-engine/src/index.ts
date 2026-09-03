@@ -12,3 +12,4 @@ export * from './standings.ts';
 export * from './eligibility.ts';
 export * from './lapsed-player.ts';
 export * from './match-play.ts';
+export * from './roster.ts';

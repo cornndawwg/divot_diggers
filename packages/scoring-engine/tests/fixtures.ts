@@ -1,6 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { parseRuleset, type IndividualTargetCompetition } from '@ddga/types';
+import {
+  parseRuleset,
+  type IndividualTargetCompetition,
+  type TeamMatchPlayCompetition,
+} from '@ddga/types';
 
 const ROOT = new URL('../../../', import.meta.url);
 
@@ -55,4 +59,14 @@ export interface FixtureManifest {
 
 export function loadManifest(): FixtureManifest {
   return readJson('fixtures/manifest.json') as FixtureManifest;
+}
+
+/** The cup competition from the real ruleset. */
+export function cupCompetition(): TeamMatchPlayCompetition {
+  const ruleset = parseRuleset(readJson('divot-diggers-ruleset.json'));
+  const cup = ruleset.competitions.find((competition) => competition.type === 'team_match_play');
+  if (cup === undefined || cup.type !== 'team_match_play') {
+    throw new Error('reference ruleset has no team_match_play competition');
+  }
+  return cup;
 }
