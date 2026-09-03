@@ -98,3 +98,24 @@ button.danger {
   font-size: 0.8rem;
 }
 button.danger:hover { border-color: var(--red); }
+
+/* --- Ruleset authoring. Two columns so the preview sits beside the controls. --- */
+main.wide, main { max-width: 60rem; }
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; align-items: start; }
+@media (max-width: 52rem) { .split { grid-template-columns: minmax(0, 1fr); } }
+h2.section { font-size: 0.95rem; margin: 0 0 0.35rem; }
+table.points { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+table.points th {
+  text-align: left; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--muted); font-weight: 700; padding: 0 0.35rem 0.35rem;
+}
+table.points td { padding: 0.15rem 0.35rem; }
+table.points td.rel { color: var(--muted); white-space: nowrap; }
+table.points td.score { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+table.points input { margin: 0; padding: 0.4rem 0.5rem; font-size: 0.9rem; }
+table.points input.points-input { width: 4.5rem; text-align: right; font-variant-numeric: tabular-nums; }
+table.points button.danger { padding: 0.3rem 0.5rem; font-size: 1rem; line-height: 1; }
+.card.preview { background: #fbfcfb; }
+dl.outcome { display: grid; grid-template-columns: auto auto; gap: 0.3rem 1rem; margin: 0.5rem 0 0; }
+dl.outcome dt { font-size: 0.8rem; color: var(--muted); }
+dl.outcome dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }

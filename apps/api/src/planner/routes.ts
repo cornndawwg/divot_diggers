@@ -364,6 +364,21 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
     return c.json({ rulesets: result.value });
   });
 
+  /** One ruleset's document, so the console can load it into the editor. */
+  app.get('/api/rulesets/:id', async (c) => {
+    const id = c.req.param('id');
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const { rows } = await client.query<{ name: string; version: number; document: unknown }>(
+        'SELECT name, version, document FROM rulesets WHERE id = $1',
+        [id],
+      );
+      return rows[0] ?? null;
+    });
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (result.value === null) return c.json({ error: 'No such ruleset.' }, 404);
+    return c.json(result.value);
+  });
+
   /**
    * Store a ruleset document. Append-only: editing publishes a new version and the old one is
    * never mutated, because a completed event's snapshot has to stay meaningful.

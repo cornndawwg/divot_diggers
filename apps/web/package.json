@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ddga/scoring-engine": "workspace:*",
+    "@ddga/types": "workspace:*",
     "better-auth": "^1.7.2",
     "next": "^16.3.4",
     "react": "^19.2.8",

@@ -4,6 +4,9 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "jsx": "preserve",
     "noEmit": true,
+    // The workspace packages are compiled from source by transpilePackages, and their
+    // internal imports carry .ts specifiers so Node can also load them at runtime.
+    "allowImportingTsExtensions": true,
     "allowJs": true,
     "incremental": true,
     "module": "ESNext",

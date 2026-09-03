@@ -47,6 +47,12 @@ importers:
 
   apps/web:
     dependencies:
+      '@ddga/scoring-engine':
+        specifier: workspace:*
+        version: link:../../packages/scoring-engine
+      '@ddga/types':
+        specifier: workspace:*
+        version: link:../../packages/types
       better-auth:
         specifier: ^1.7.2
         version: 1.7.2(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@types/pg@8.23.1)(kysely@0.29.5)(pg@8.23.0))(next@16.3.4(@types/node@22.20.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(pg@8.23.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@3.2.7(@types/node@22.20.1)(tsx@4.23.13))
