@@ -126,5 +126,11 @@ Do not build these, even if they seem natural:
 - Realtime WebSockets before Phase 4. Polling is sufficient and simpler.
 - A full offline replica, delta sync, or client-side leaderboard computation. Queue writes, cache
   the active round, nothing more.
-- GPS course matching or a licensed course-data feed. Manual entry and photo import only.
+- GPS course matching or a licensed course-data feed. **Manual entry only** — see below.
 - Long-term storage of scorecard images.
+- **Scorecard photo import (task 2.4a), and any use of a vision model or AI.** Decided
+  2026-09-03: the infrastructure for it does not exist and AI is not being introduced to this
+  build. Course data goes in by hand. Revisit only if a course-data API is licensed later, at
+  which point GPS maps and scorecards would come from that feed rather than from a photo. The
+  database side is already built and harmless to leave in place: `course_import_jobs`, its
+  ephemeral-image constraint, and the checksum suite, which manual entry uses anyway.
