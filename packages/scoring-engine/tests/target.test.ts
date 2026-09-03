@@ -130,3 +130,85 @@ describe('rejecting nonsense input', () => {
     expect(() => applyRounds(20, [Number.POSITIVE_INFINITY], divotDiggers)).toThrow(/finite/i);
   });
 });
+
+describe('proration for a short round', () => {
+  // Answered by the group: their dogfight is always 18 and their Cup always 9, 27 holes a
+  // day split between the two games. That is their arrangement, not a rule — so both the
+  // switch and the denominator are config.
+  it('leaves a full-length round completely alone', () => {
+    const outcome = applyRound(initialTargetState(44), 47, divotDiggers, { holesInPlay: 18 });
+    expect(outcome.effectiveTarget).toBe(44);
+    expect(outcome.roundDelta).toBe(3);
+  });
+
+  it('does not change the golden recurrence when the round is full length', () => {
+    // Levi Livermont, 2019. Identical whether or not the caller mentions the hole count.
+    const silent = applyRounds(20, [24, 25, 29], divotDiggers);
+    const explicit = [24, 25, 29].reduce(
+      (state, pulled, index) => {
+        const outcome = applyRound(state, pulled, divotDiggers, {
+          isFinalRound: index === 2,
+          holesInPlay: 18,
+        });
+        return outcome.next;
+      },
+      initialTargetState(20),
+    );
+    expect(explicit.target).toBe(silent.carryoverRaw);
+  });
+
+  it('halves an 18-hole target for a nine', () => {
+    const outcome = applyRound(initialTargetState(44), 25, divotDiggers, { holesInPlay: 9 });
+    expect(outcome.target).toBe(44);
+    expect(outcome.effectiveTarget).toBe(22);
+    expect(outcome.roundDelta).toBe(3);
+  });
+
+  it('keeps full precision, rounding nothing', () => {
+    // A fractional in-trip target stays fractional through proration.
+    const outcome = applyRound(initialTargetState(43.25), 20, divotDiggers, { holesInPlay: 9 });
+    expect(outcome.effectiveTarget).toBe(21.625);
+    expect(outcome.roundDelta).toBe(-1.625);
+  });
+
+  it('treats a nine as a full round for a group calibrated over nine holes', () => {
+    // The same nine-hole round, a different group's ruleset, no proration at all.
+    const nineHoleGroup = withTarget({ holesPerFullRound: 9 });
+    const outcome = applyRound(initialTargetState(22), 25, nineHoleGroup, { holesInPlay: 9 });
+    expect(outcome.effectiveTarget).toBe(22);
+    expect(outcome.roundDelta).toBe(3);
+  });
+
+  it('prorates a group calibrated over nine when they play a full 18', () => {
+    const nineHoleGroup = withTarget({ holesPerFullRound: 9 });
+    const outcome = applyRound(initialTargetState(22), 50, nineHoleGroup, { holesInPlay: 18 });
+    expect(outcome.effectiveTarget).toBe(44);
+  });
+
+  it('ignores the hole count entirely when the ruleset says not to prorate', () => {
+    const noProration = withTarget({ prorateByHoles: false });
+    const outcome = applyRound(initialTargetState(44), 25, noProration, { holesInPlay: 9 });
+    expect(outcome.effectiveTarget).toBe(44);
+    expect(outcome.roundDelta).toBe(-19);
+  });
+
+  it('reports the hole count it was given, so a scorecard can show it', () => {
+    expect(applyRound(initialTargetState(44), 25, divotDiggers, { holesInPlay: 9 }).holesInPlay)
+      .toBe(9);
+    expect(applyRound(initialTargetState(44), 47, divotDiggers).holesInPlay).toBeNull();
+  });
+
+  it('refuses a hole count that is not a positive number', () => {
+    expect(() => applyRound(initialTargetState(44), 25, divotDiggers, { holesInPlay: 0 })).toThrow(
+      /holesInPlay must be a positive number/,
+    );
+    expect(() => applyRound(initialTargetState(44), 25, divotDiggers, { holesInPlay: -9 })).toThrow(
+      /holesInPlay/,
+    );
+  });
+
+  it('defaults the denominator to 18 without the reference ruleset naming it', () => {
+    // divot-diggers-ruleset.json does not carry holesPerFullRound; the schema supplies it.
+    expect(divotDiggers.holesPerFullRound).toBe(18);
+  });
+});

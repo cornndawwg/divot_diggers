@@ -42,6 +42,15 @@ export const targetSchema = z.strictObject({
   displayPrecision: z.number().int().min(0).max(6),
   prorateByHoles: z.boolean(),
   /**
+   * How many holes the target is calibrated over — the denominator for proration.
+   *
+   * Never assume 18. The Divot Diggers dogfight is always 18 and their Cup always 9, but that
+   * is their arrangement, not a rule: a group whose rounds are all nines has a target
+   * calibrated over 9 and needs no proration at all. The default is 18 because it is the
+   * common case, not because the engine knows anything about golf.
+   */
+  holesPerFullRound: z.number().int().min(1).max(36).default(18),
+  /**
    * Two separate decisions that point opposite ways: missing a round protects the rating but
    * forfeits the prize. See spec 1.3.
    */

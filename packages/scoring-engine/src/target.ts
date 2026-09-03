@@ -21,8 +21,15 @@ export type RoundInput = number | typeof DID_NOT_PLAY;
 
 /** What one round did to a player's target and standing. */
 export interface RoundOutcome {
-  /** The target played against — the value that was in force before this round. */
+  /** The player's standing target, before any proration for a short round. */
   readonly target: number;
+  /**
+   * The target actually played against. Equal to `target` unless the round was shorter than
+   * a full round and the ruleset prorates.
+   */
+  readonly effectiveTarget: number;
+  /** Holes played in this round, or null when the caller did not say. */
+  readonly holesInPlay: number | null;
   readonly didNotPlay: boolean;
   /** null for a missed round. A missed round is unscored, not scored as zero. */
   readonly pointsPulled: number | null;
@@ -70,6 +77,34 @@ export interface ApplyRoundOptions {
    * moments: `adjustBetweenRounds` between rounds, `adjustAtEventEnd` on the way out.
    */
   readonly isFinalRound?: boolean;
+  /**
+   * Holes played in this round, from the round's resolved hole selection. Only used when the
+   * ruleset sets `prorateByHoles`; omit it and the full target applies.
+   */
+  readonly holesInPlay?: number;
+}
+
+/**
+ * The target to play against for a round of this length.
+ *
+ * A target calibrated over 18 holes is not a fair expectation over 9, so a ruleset can scale
+ * it by the fraction of a round actually played. Both the switch and the denominator are
+ * config: nothing here knows that a round is usually 18 holes.
+ */
+export function effectiveTargetFor(
+  target: number,
+  config: Target,
+  holesInPlay?: number,
+): number {
+  if (!config.prorateByHoles || holesInPlay === undefined) return target;
+  if (!Number.isFinite(holesInPlay) || holesInPlay <= 0) {
+    throw new ScoringInputError(
+      `holesInPlay must be a positive number, received ${String(holesInPlay)}.`,
+    );
+  }
+  if (holesInPlay === config.holesPerFullRound) return target;
+  // Full precision, as everywhere in the recurrence — invariant #2.
+  return (target * holesInPlay) / config.holesPerFullRound;
 }
 
 /**
@@ -95,6 +130,8 @@ export function applyRound(
   if (pointsPulled === DID_NOT_PLAY && config.didNotPlay.ptp === 'freeze') {
     return {
       target: state.target,
+      effectiveTarget: state.target,
+      holesInPlay: options.holesInPlay ?? null,
       didNotPlay: true,
       pointsPulled: null,
       roundDelta: null,
@@ -107,7 +144,8 @@ export function applyRound(
   const scored = pointsPulled === DID_NOT_PLAY ? 0 : pointsPulled;
   assertFinite(scored, 'pointsPulled');
 
-  const roundDelta = scored - state.target;
+  const effectiveTarget = effectiveTargetFor(state.target, config, options.holesInPlay);
+  const roundDelta = scored - effectiveTarget;
 
   const runningTotal =
     config.runningTotal === 'cumulative' ? state.runningTotal + roundDelta : roundDelta;
@@ -121,6 +159,8 @@ export function applyRound(
 
   return {
     target: state.target,
+    effectiveTarget,
+    holesInPlay: options.holesInPlay ?? null,
     didNotPlay: pointsPulled === DID_NOT_PLAY,
     pointsPulled: scored,
     roundDelta,
