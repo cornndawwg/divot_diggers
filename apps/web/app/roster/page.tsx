@@ -63,6 +63,8 @@ export default function RosterPage() {
   const [pending, setPending] = useState<ArchivedPerson | null>(null);
   const [handicap, setHandicap] = useState('');
   const [manualPtp, setManualPtp] = useState('');
+  const [removed, setRemoved] = useState<ArchivedPerson[]>([]);
+  const [showRemoved, setShowRemoved] = useState(false);
 
   const load = useCallback(async (id?: string) => {
     const eventsResponse = await fetch(`${apiUrl}/api/events`, { credentials: 'include' });
@@ -87,6 +89,10 @@ export default function RosterPage() {
       fetch(`${apiUrl}/api/events/${active}/roster-balance`, { credentials: 'include' }),
     ]);
     setArchive(((await archiveResponse.json()) as { people: ArchivedPerson[] }).people);
+    const removedResponse = await fetch(`${apiUrl}/api/people?removed=true`, {
+      credentials: 'include',
+    });
+    setRemoved(((await removedResponse.json()) as { people: ArchivedPerson[] }).people);
     setRoster(((await rosterResponse.json()) as { players: RosterPlayer[] }).players);
     setBalance(balanceResponse.ok ? ((await balanceResponse.json()) as Balance) : null);
     setState('ready');
@@ -142,6 +148,45 @@ export default function RosterPage() {
     setPending(null);
     setHandicap('');
     setManualPtp('');
+    await load(eventId);
+  }
+
+  /** Take someone off this year's roster. Refused once they have been scored. */
+  async function removeFromRoster(player: RosterPlayer) {
+    setMessage('');
+    const response = await fetch(`${apiUrl}/api/events/${eventId}/players/${player.personId}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      setMessage(((await response.json()) as { error: string }).error);
+      return;
+    }
+    setMessage(`${player.displayName} is off the roster. They are still in the archive.`);
+    await load(eventId);
+  }
+
+  /** Remove from the archive. Soft: their rating history survives. */
+  async function removeFromArchive(person: ArchivedPerson) {
+    setMessage('');
+    const response = await fetch(`${apiUrl}/api/people/${person.id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      setMessage(((await response.json()) as { error: string }).error);
+      return;
+    }
+    setMessage(`${person.displayName} removed from the archive. Their history is kept.`);
+    await load(eventId);
+  }
+
+  async function restore(person: ArchivedPerson) {
+    await fetch(`${apiUrl}/api/people/${person.id}/restore`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    setMessage(`${person.displayName} is back, with their rating history.`);
     await load(eventId);
   }
 
@@ -221,6 +266,14 @@ export default function RosterPage() {
                   <br />
                   <span className="meta">PTP</span>
                 </span>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => void removeFromRoster(player)}
+                  aria-label={`Remove ${player.displayName} from the roster`}
+                >
+                  Remove
+                </button>
               </li>
             ))}
           </ul>
@@ -275,15 +328,58 @@ export default function RosterPage() {
                     </p>
                   </span>
                 ) : (
-                  <button type="button" onClick={() => setPending(person)}>
-                    Add
-                  </button>
+                  <>
+                    <button type="button" onClick={() => setPending(person)}>
+                      Add
+                    </button>
+                    <button
+                      type="button"
+                      className="danger"
+                      onClick={() => void removeFromArchive(person)}
+                      aria-label={`Remove ${person.displayName} from the archive`}
+                    >
+                      Archive off
+                    </button>
+                  </>
                 )}
               </li>
             ))}
           </ul>
         )}
       </div>
+
+      {removed.length > 0 && (
+        <div className="card" style={{ marginTop: '1rem' }}>
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => setShowRemoved(!showRemoved)}
+          >
+            {showRemoved ? 'Hide' : 'Show'} {removed.length} removed{' '}
+            {removed.length === 1 ? 'golfer' : 'golfers'}
+          </button>
+          {showRemoved && (
+            <ul className="list" style={{ marginTop: '0.75rem' }}>
+              {removed.map((person) => (
+                <li key={person.id}>
+                  <span>
+                    {person.displayName}
+                    <br />
+                    <span className="meta">
+                      {person.lastRating !== null
+                        ? `PTP ${person.lastRating.rounded} kept`
+                        : 'no rating on file'}
+                    </span>
+                  </span>
+                  <button type="button" onClick={() => void restore(person)}>
+                    Put back
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className="card" style={{ marginTop: '1rem' }}>
         <h2 style={{ fontSize: '1rem', margin: '0 0 0.5rem' }}>Someone new</h2>

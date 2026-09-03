@@ -70,6 +70,36 @@ describe('the test connection is genuinely unprivileged', () => {
     expect(rows[0]?.rolbypassrls).toBe(false);
   });
 
+  it('can delete from exactly the two roster tables and nowhere else', async () => {
+    // A stray DELETE grant is how history quietly disappears. Ratings are append-only,
+    // archive removal is soft, and scores are never deleted by the app at all.
+    const { rows } = await database.owner.query<{ table_name: string }>(
+      `SELECT DISTINCT table_name FROM information_schema.role_table_grants
+        WHERE grantee = $1 AND privilege_type = 'DELETE' AND table_schema = 'public'
+        ORDER BY table_name`,
+      [database.appUserRole],
+    );
+    expect(rows.map((row) => row.table_name)).toEqual(['event_players', 'event_roles']);
+  });
+
+  it('is refused outright when it tries to delete a score', async () => {
+    await expect(database.appUser.query('DELETE FROM hole_scores')).rejects.toThrow(
+      /permission denied/i,
+    );
+    await expect(database.appUser.query('DELETE FROM scorecards')).rejects.toThrow(
+      /permission denied/i,
+    );
+  });
+
+  it('cannot destroy a rating, though the refusal is silent rather than loud', async () => {
+    // player_ratings carries DO INSTEAD NOTHING rules, so a delete succeeds and removes
+    // nothing. Worth pinning: "it worked" and "it did nothing" look identical to a caller.
+    const before = await countAsOwner('SELECT count(*) FROM player_ratings');
+    await database.appUser.query('DELETE FROM player_ratings');
+    expect(await countAsOwner('SELECT count(*) FROM player_ratings')).toBe(before);
+    expect(before).toBeGreaterThan(0);
+  });
+
   it('needs no FORCE ROW LEVEL SECURITY to be subject to policies', async () => {
     // docs/schema-tests.sql uses FORCE because it runs as owner. We do not, and must not.
     const { rows } = await database.owner.query<{ count: string }>(
@@ -321,6 +351,28 @@ describe('the people table, since migration 0003', () => {
       [INSIDER],
     );
     expect(rows[0]?.display_name).toBe('Justin');
+  });
+
+  it('hides a removed member from another organization entirely', async () => {
+    // Migration 0009 lets an OWNER see who they removed. It must not leak further.
+    await database.owner.query(
+      `INSERT INTO people (id, display_name, email) VALUES ($1,'Removed Person','rm@x.com')`,
+      ['aaaaaaaa-0000-0000-0000-00000000000f'],
+    );
+    await database.owner.query(
+      `INSERT INTO org_members (org_id, person_id, role, removed_at)
+       VALUES ($1,$2,'member', now())`,
+      [ORG_A, 'aaaaaaaa-0000-0000-0000-00000000000f'],
+    );
+
+    // Org A's owner can see them, to put them back.
+    expect(
+      await countAs(INSIDER, `SELECT count(*) FROM people WHERE display_name = 'Removed Person'`),
+    ).toBe(1);
+    // Org B cannot.
+    expect(
+      await countAs(OUTSIDER, `SELECT count(*) FROM people WHERE display_name = 'Removed Person'`),
+    ).toBe(0);
   });
 
   it('leaves no unprotected table holding personal data', async () => {

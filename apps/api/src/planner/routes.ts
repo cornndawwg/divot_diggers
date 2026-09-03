@@ -489,7 +489,9 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
                    WHERE ep.person_id = p.id AND ep.event_id = $1::uuid
                 ) AS on_roster
            FROM people p
-           JOIN org_members m ON m.person_id = p.id AND m.removed_at IS NULL
+           JOIN org_members m ON m.person_id = p.id
+                             AND (($2::boolean) OR m.removed_at IS NULL)
+                             AND ((NOT $2::boolean) OR m.removed_at IS NOT NULL)
            LEFT JOIN LATERAL (
              SELECT max(e.year) AS last_year, count(*) AS events_played
                FROM event_players ep JOIN events e ON e.id = ep.event_id
@@ -504,7 +506,7 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
               LIMIT 1
            ) rating ON true
           ORDER BY p.display_name`,
-        [eventId],
+        [eventId, c.req.query('removed') === 'true'],
       );
 
       return rows.map((row) => ({
@@ -800,6 +802,96 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
       );
     }
     return c.json({ id: result.value.id, startingTarget: result.value.seeded }, 201);
+  });
+
+  /**
+   * Take someone off this year's roster.
+   *
+   * Refused once they have been scored: scorecards cascade from event_players, so the delete
+   * would take their scores with it. The database enforces that with a trigger, and this
+   * turns the refusal into something a planner can read.
+   */
+  app.delete('/api/events/:id/players/:personId', async (c) => {
+    const eventId = c.req.param('id');
+    const personId = c.req.param('personId');
+
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      try {
+        const removed = await client.query(
+          'DELETE FROM event_players WHERE event_id = $1 AND person_id = $2',
+          [eventId, personId],
+        );
+        if (removed.rowCount === 0) return { kind: 'not-on-roster' as const };
+        // They keep any other role, but they are no longer a player in this event.
+        await client.query(
+          `DELETE FROM event_roles WHERE event_id = $1 AND person_id = $2 AND role = 'player'`,
+          [eventId, personId],
+        );
+        return { kind: 'removed' as const };
+      } catch (error) {
+        if (error instanceof Error && /already has scores recorded/i.test(error.message)) {
+          return { kind: 'has-scores' as const, message: error.message };
+        }
+        throw error;
+      }
+    });
+
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (result.value.kind === 'not-on-roster') {
+      return c.json({ error: 'They are not on this roster.' }, 404);
+    }
+    if (result.value.kind === 'has-scores') {
+      return c.json({ error: result.value.message }, 409);
+    }
+    return c.json({ removed: true });
+  });
+
+  /**
+   * Remove someone from the group's archive.
+   *
+   * Soft: their rating history is the PTP lineage and has to stay reconstructable, so it is
+   * never deleted. They disappear from the picker; putting them back restores everything.
+   */
+  app.delete('/api/people/:personId', async (c) => {
+    const personId = c.req.param('personId');
+    const result = await asSignedIn(c.req.raw.headers, async (client, self) => {
+      if (personId === self) return { kind: 'self' as const };
+      const updated = await client.query(
+        `UPDATE org_members SET removed_at = now()
+          WHERE person_id = $1 AND removed_at IS NULL`,
+        [personId],
+      );
+      return updated.rowCount === 0
+        ? ({ kind: 'not-found' as const })
+        : ({ kind: 'removed' as const });
+    });
+
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (result.value.kind === 'self') {
+      return c.json({ error: 'You cannot remove yourself from your own group.' }, 409);
+    }
+    if (result.value.kind === 'not-found') {
+      return c.json({ error: 'Nobody to remove, or you are not an owner of this group.' }, 404);
+    }
+    return c.json({ removed: true });
+  });
+
+  /** Put someone back, with their rating history intact. */
+  app.post('/api/people/:personId/restore', async (c) => {
+    const personId = c.req.param('personId');
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const updated = await client.query(
+        `UPDATE org_members SET removed_at = NULL
+          WHERE person_id = $1 AND removed_at IS NOT NULL`,
+        [personId],
+      );
+      return updated.rowCount === 0 ? 'not-found' : 'restored';
+    });
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (result.value === 'not-found') {
+      return c.json({ error: 'Nobody to put back, or you are not an owner of this group.' }, 404);
+    }
+    return c.json({ restored: true });
   });
 
   /** What a returning golfer's target might be, for the planner to confirm or edit. */

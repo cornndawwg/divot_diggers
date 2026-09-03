@@ -87,3 +87,14 @@ main.wide { max-width: 34rem; }
   width: auto; background: none; color: var(--green); padding: 0;
   font-weight: 600; text-decoration: underline;
 }
+
+/* Removal is destructive but ordinary — visible, not shouted. */
+button.danger {
+  background: #fff;
+  color: var(--red);
+  border: 1px solid var(--line);
+  width: auto;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.8rem;
+}
+button.danger:hover { border-color: var(--red); }

@@ -145,7 +145,7 @@ describe('the guarantees the migrations carry', () => {
     expect(rows[0]?.count).toBe('0');
   });
 
-  it('carries 35 policies, and accounts for every one', async () => {
+  it('carries 38 policies, and accounts for every one', async () => {
     const { rows } = await pool.query<{ count: string }>(
       "SELECT count(*) FROM pg_policies WHERE schemaname = 'public'",
     );
@@ -154,7 +154,17 @@ describe('the guarantees the migrations carry', () => {
     //   0004  auth_owner_only on each of the four credential tables
     //   0005  course_write, course_update, round_write, round_update
     //   0006  event_player_write, event_player_update, event_role_write, rating_write
-    expect(rows[0]?.count).toBe('35');
+    //   0008  event_player_delete, event_role_delete, member_update
+    expect(rows[0]?.count).toBe('38');
+  });
+
+  it('protects a scored player from being deleted', async () => {
+    const { rows } = await pool.query<{ tgname: string }>(
+      `SELECT tgname FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
+        WHERE c.relname = 'event_players' AND NOT t.tgisinternal
+        ORDER BY tgname`,
+    );
+    expect(rows.map((row) => row.tgname)).toContain('event_players_protect_scores');
   });
 
   it('gives the roster write paths a policy each', async () => {

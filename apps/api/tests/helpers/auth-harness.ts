@@ -72,6 +72,10 @@ export async function createAuthHarness(name: string): Promise<AuthHarness> {
   await privilegedPool.query(`GRANT USAGE ON SCHEMA public TO ${role}`);
   await privilegedPool.query(`GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO ${role}`);
   await privilegedPool.query(`GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO ${role}`);
+  // Removing someone from a roster. Deliberately granted nowhere else: everything else is
+  // append-only or soft-deleted by design, and a stray DELETE grant is how history quietly
+  // disappears.
+  await privilegedPool.query(`GRANT DELETE ON event_players, event_roles TO ${role}`);
 
   const domainPool = new Pool({ connectionString: urlFor(name, { name: role, password }) });
   const mailer = createCapturingMailer();
