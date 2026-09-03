@@ -19,6 +19,8 @@ const config: NextConfig = {
   // deploys — a single public host in front of both.
   env: {
     NEXT_PUBLIC_API_URL: '',
+    // Only used while server-rendering, where there is no window to read an origin from.
+    NEXT_PUBLIC_SITE_URL: process.env['PUBLIC_URL'] ?? 'http://localhost:3000',
   },
 
   async rewrites() {
