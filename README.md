@@ -70,18 +70,20 @@ Leave both running and open http://localhost:3000. If either reports
 `EADDRINUSE`, a copy is already running — the error message tells you how to find and stop it.
 On a remote machine, forward ports 3000 and 8787 (VS Code does this from its Ports panel).
 
-**Testing email links before there is a public URL.** Verification and reset links point at
-`API_URL`, which is `localhost` in development, so an email client on another device cannot open
-them. To get a working link in the terminal instead:
+**One origin.** The browser only ever talks to port 3000. Next proxies `/api/*` through to the
+API server side, so there is one port to forward, session cookies are first-party, there is no
+CORS, and an emailed verification link resolves from any device that can reach the console.
+`PUBLIC_URL` is what links are built on and defaults to `WEB_URL`; `API_INTERNAL_URL` is where
+the proxy forwards to and defaults to `http://localhost:8787`.
+
+**Getting a link without email.** Useful when mail is slow or the address is not real:
 
 ```
 pnpm auth:link verify you@example.com
 pnpm auth:link reset  you@example.com
 ```
 
-Both print a real link produced by the same code path the email uses, and send nothing. Paste it
-into a browser that has the ports forwarded. Once the API has a public URL, set `API_URL` and
-`WEB_URL` to it and the emailed links work directly.
+Both print a real link produced by the same code path the email uses, and send nothing.
 
 **Checks you can run**, in rough order of how much they prove:
 

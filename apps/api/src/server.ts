@@ -26,7 +26,7 @@ const mailer = createMailgunMailer({
 const auth = createAuth({
   pool: privilegedPool,
   secret: env.authSecret,
-  baseUrl: env.baseUrl,
+  baseUrl: env.publicUrl,
   webUrl: env.webUrl,
   mailer,
 });
@@ -71,7 +71,7 @@ process.on('uncaughtException', (error: NodeJS.ErrnoException) => {
 
 serve({ fetch: app.fetch, port }, (info) => {
   console.log(`API listening on http://localhost:${info.port}`);
-  console.log(`  auth routes  ${env.baseUrl}/api/auth/*`);
+  console.log(`  auth routes  ${env.publicUrl}/api/auth/*`);
   console.log(`  console      ${env.webUrl}`);
   if (process.env['APP_DATABASE_URL'] === undefined) {
     console.warn(

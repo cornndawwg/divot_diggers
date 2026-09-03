@@ -3,12 +3,14 @@
 import { createAuthClient } from 'better-auth/react';
 
 /**
- * The console talks to the API over HTTP and never to the database. Cookies carry the
- * session, so every request needs credentials included.
+ * The console talks to the API over its own origin, which Next proxies through to the API
+ * server side. Same-origin means first-party session cookies, no CORS, and one port to
+ * forward when developing on a remote machine.
  */
 export const authClient = createAuthClient({
-  baseURL: `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787'}/api/auth`,
+  baseURL: '/api/auth',
   fetchOptions: { credentials: 'include' },
 });
 
-export const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+/** Empty, so every call is a same-origin path like `/api/courses`. */
+export const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';

@@ -32,7 +32,7 @@ const mailer = createCapturingMailer();
 const auth = createAuth({
   pool,
   secret: env.authSecret,
-  baseUrl: env.baseUrl,
+  baseUrl: env.publicUrl,
   webUrl: env.webUrl,
   mailer,
 });

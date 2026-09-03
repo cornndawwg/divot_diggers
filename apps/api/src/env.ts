@@ -7,7 +7,11 @@
 export interface ApiEnv {
   readonly databaseUrl: string;
   readonly authSecret: string;
-  readonly baseUrl: string;
+  /**
+   * The origin a browser sees. Emailed links are built on this, so it has to be reachable
+   * from wherever mail is read — which the API's own port generally is not.
+   */
+  readonly publicUrl: string;
   readonly webUrl: string;
   readonly mailgunApiKey: string;
   readonly mailgunDomain: string;
@@ -29,14 +33,17 @@ function optional(name: string, fallback: string): string {
 
 export function loadEnv(): ApiEnv {
   const mailgunDomain = required('MAILGUN_DOMAIN', 'The Mailgun sending domain, e.g. example.com.');
+  const webUrl = optional('WEB_URL', 'http://localhost:3000');
   return {
     databaseUrl: required('DATABASE_URL', 'The Postgres connection string, from .env.'),
     authSecret: required(
       'AUTH_SECRET',
       'A random string used to sign sessions. Generate one with: openssl rand -hex 32',
     ),
-    baseUrl: optional('API_URL', 'http://localhost:8787'),
-    webUrl: optional('WEB_URL', 'http://localhost:3000'),
+    // Defaults to the console's origin, because that is what the browser and an email
+    // client can both reach. The API's own port sits behind it.
+    publicUrl: optional('PUBLIC_URL', webUrl),
+    webUrl,
     mailgunApiKey: required('MAILGUN_API', 'The Mailgun private API key, from .env.'),
     mailgunDomain,
     mailFrom: optional('MAIL_FROM', `Divot Diggers <noreply@${mailgunDomain}>`),

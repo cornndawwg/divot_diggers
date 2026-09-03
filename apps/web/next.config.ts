@@ -12,8 +12,18 @@ const config: NextConfig = {
   transpilePackages: ['@ddga/types', '@ddga/scoring-engine'],
 
   // The console is a browser client of the API; it holds no database credentials.
+  //
+  // Requests go to /api/* on this origin and are proxied to the API server side. One origin
+  // means: only one port to forward, no CORS, first-party session cookies, and an emailed
+  // link that resolves from any device that can reach the console. It also matches how this
+  // deploys — a single public host in front of both.
   env: {
-    NEXT_PUBLIC_API_URL: process.env['API_URL'] ?? 'http://localhost:8787',
+    NEXT_PUBLIC_API_URL: '',
+  },
+
+  async rewrites() {
+    const api = process.env['API_INTERNAL_URL'] ?? 'http://localhost:8787';
+    return [{ source: '/api/:path*', destination: `${api}/api/:path*` }];
   },
 };
 
