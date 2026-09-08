@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { PoolClient } from 'pg';
-import { CourseImportRejected, importCourse } from '../src/courses/import.ts';
+import { CourseAlreadyExists, CourseImportRejected, importCourse } from '../src/courses/import.ts';
 import { createAuthHarness, type AuthHarness } from './helpers/auth-harness.ts';
 
 const SEED = JSON.parse(
@@ -212,6 +212,58 @@ describe('the database backstops the validator', () => {
           [orgId],
         ),
       ).rejects.toThrow(/licensed_rows_need_provider/);
+    });
+  });
+});
+
+
+describe('importing the same course twice', () => {
+  it('refuses by default, and says which course is in the way', async () => {
+    await inRollback(async (client) => {
+      const first = await importCourse(client, orgId, null, SEED);
+
+      await expect(importCourse(client, orgId, null, SEED)).rejects.toThrow(CourseAlreadyExists);
+      await expect(importCourse(client, orgId, null, SEED)).rejects.toThrow(
+        /already has a course called/i,
+      );
+
+      // And nothing was written by the attempt.
+      const { rows } = await client.query<{ count: string }>(
+        'SELECT count(*) FROM courses WHERE org_id = $1 AND name = $2',
+        [orgId, (SEED as { course: { name: string } }).course.name],
+      );
+      expect(rows[0]?.count).toBe('1');
+      expect(first.alreadyPresent).toBe(false);
+    });
+  });
+
+  it('hands back the existing course when told to skip, so a re-run of a seed is safe', async () => {
+    await inRollback(async (client) => {
+      const first = await importCourse(client, orgId, null, SEED);
+      const second = await importCourse(client, orgId, null, SEED, { onDuplicateName: 'skip' });
+
+      expect(second.alreadyPresent).toBe(true);
+      expect(second.courseId).toBe(first.courseId);
+      expect(second.teeSetIds).toHaveLength(4);
+      expect(second.holeCount).toBe(72);
+
+      const { rows } = await client.query<{ count: string }>(
+        'SELECT count(*) FROM tee_sets WHERE course_id = $1',
+        [first.courseId],
+      );
+      // The point of the whole exercise: four tee sets, not eight.
+      expect(rows[0]?.count).toBe('4');
+    });
+  });
+
+  it('will still make a second one when that is genuinely what is wanted', async () => {
+    await inRollback(async (client) => {
+      const first = await importCourse(client, orgId, null, SEED);
+      const second = await importCourse(client, orgId, null, SEED, {
+        onDuplicateName: 'duplicate',
+      });
+      expect(second.courseId).not.toBe(first.courseId);
+      expect(second.alreadyPresent).toBe(false);
     });
   });
 });

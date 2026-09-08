@@ -101,11 +101,16 @@ describe('the test connection is genuinely unprivileged', () => {
     );
   });
 
-  it('cannot destroy a rating, though the refusal is silent rather than loud', async () => {
-    // player_ratings carries DO INSTEAD NOTHING rules, so a delete succeeds and removes
-    // nothing. Worth pinning: "it worked" and "it did nothing" look identical to a caller.
+  it('cannot destroy a rating, and since 0015 is told so out loud', async () => {
+    // Two things stop this: no DELETE grant on the table, and the append-only rule. Before
+    // 0015 the rule was unconditional, so Postgres dropped the statement before it ever
+    // reached a permission check and the caller got a cheerful "0 rows". Now the rule is
+    // conditional, the statement survives rewriting, and the missing grant refuses it
+    // properly. Nothing is deleted either way; the difference is that the caller finds out.
     const before = await countAsOwner('SELECT count(*) FROM player_ratings');
-    await database.appUser.query('DELETE FROM player_ratings');
+    await expect(database.appUser.query('DELETE FROM player_ratings')).rejects.toThrow(
+      /permission denied/i,
+    );
     expect(await countAsOwner('SELECT count(*) FROM player_ratings')).toBe(before);
     expect(before).toBeGreaterThan(0);
   });
@@ -405,6 +410,145 @@ describe('the people table, since migration 0003', () => {
   });
 });
 
+describe('a rating that points at an event', () => {
+  // The seeded rating has no event attached, so these make their own.
+  async function ratingAgainst(eventId: string, rounded: number): Promise<void> {
+    await database.owner.query(
+      `INSERT INTO player_ratings (org_id, person_id, competition_key, raw_value,
+                                   rounded_value, after_event_id, reason)
+       VALUES ($1, $2, 'dogfight', $3, $4, $5, 'event_carryover')`,
+      [ORG_A, INSIDER, rounded + 0.5, rounded, eventId],
+    );
+  }
+
+  async function eventLike(id: string, name: string): Promise<void> {
+    await database.owner.query(
+      `INSERT INTO events (id, org_id, name, year, status, ruleset_snapshot)
+       SELECT $1, org_id, $2, 2029, 'draft', ruleset_snapshot FROM events WHERE id = $3`,
+      [id, name, EVENT_A],
+    );
+  }
+
+  it('cannot be cut loose from it by hand', async () => {
+    // 0015 lets the SET NULL through. It must not also become a way for a caller to detach
+    // history whenever they like, so the rule additionally requires that the event is
+    // already gone — which only the referential action can ever be true for.
+    await ratingAgainst(EVENT_A, 31);
+    await database.owner.query(
+      'UPDATE player_ratings SET after_event_id = NULL WHERE rounded_value = 31',
+    );
+
+    const { rows } = await database.owner.query<{ after_event_id: string | null }>(
+      'SELECT after_event_id FROM player_ratings WHERE rounded_value = 31',
+    );
+    expect(rows[0]?.after_event_id).toBe(EVENT_A);
+  });
+
+  it('nor by an update dressed up to look like the referential action', async () => {
+    await ratingAgainst(EVENT_A, 32);
+    await database.owner.query(
+      'UPDATE player_ratings SET after_event_id = NULL, rounded_value = 99 WHERE rounded_value = 32',
+    );
+    const { rows } = await database.owner.query<{
+      after_event_id: string | null;
+      rounded_value: number;
+    }>('SELECT after_event_id, rounded_value FROM player_ratings WHERE rounded_value = 32');
+    expect(rows[0]?.after_event_id).toBe(EVENT_A);
+    expect(rows[0]?.rounded_value).toBe(32);
+  });
+
+  // Until 0015 this was impossible. after_event_id is ON DELETE SET NULL, the append-only
+  // rule swallowed the UPDATE that implements it, Postgres saw its own referential query
+  // come back wrong, and the whole delete aborted with "referential integrity query ... gave
+  // unexpected result". A planner who set an event up by mistake was stuck with it for good.
+  it('lets that event be deleted, and survives it with no event attached', async () => {
+    const scratch = '11111111-1111-1111-1111-111111111111';
+    await eventLike(scratch, 'Made By Mistake');
+    await ratingAgainst(scratch, 33);
+
+    await database.owner.query('DELETE FROM events WHERE id = $1', [scratch]);
+
+    const events = await database.owner.query<{ count: string }>(
+      'SELECT count(*) FROM events WHERE id = $1',
+      [scratch],
+    );
+    expect(events.rows[0]?.count).toBe('0');
+
+    // The history survives the event, which is why the column is SET NULL and not CASCADE.
+    // A player's PTP record is not the event's to take with it.
+    const rating = await database.owner.query<{ after_event_id: null }>(
+      'SELECT after_event_id FROM player_ratings WHERE rounded_value = 33',
+    );
+    expect(rating.rows).toHaveLength(1);
+    expect(rating.rows[0]?.after_event_id).toBeNull();
+  });
+});
+
+describe('the guard on a scored player', () => {
+  // 0008 stops a planner removing somebody whose scores would go with them. 0016 narrows it
+  // so it does not also stand in the way of deleting the whole event, which cascades to the
+  // same rows. Both halves matter, so both are pinned — on an event of their own, because
+  // the second half destroys what it works on.
+  const EVENT = '22222222-2222-2222-2222-222222222222';
+  const PLAYER = '22222222-2222-2222-2222-222222222233';
+  const ROUND = '22222222-2222-2222-2222-222222222244';
+
+  beforeAll(async () => {
+    await database.owner.query(
+      `INSERT INTO events (id, org_id, name, year, status, ruleset_snapshot)
+       SELECT $1, org_id, 'Scored And Doomed', 2030, 'draft', ruleset_snapshot
+         FROM events WHERE id = $2`,
+      [EVENT, EVENT_A],
+    );
+    await database.owner.query(
+      `INSERT INTO event_players (id, event_id, person_id, starting_ptp, starting_ptp_source)
+       VALUES ($1,$2,$3,30,'manual')`,
+      [PLAYER, EVENT, INSIDER],
+    );
+    await database.owner.query(
+      `INSERT INTO rounds (id, event_id, key, name, sequence) VALUES ($1,$2,'thu-am','Thursday AM',1)`,
+      [ROUND, EVENT],
+    );
+    // A round entered as a totals-only card — exactly what the guard is there to protect.
+    await database.owner.query(
+      `INSERT INTO scorecards (round_id, event_player_id, status, entry_mode, points_pulled_manual)
+       VALUES ($1,$2,'submitted','totals_only',41)`,
+      [ROUND, PLAYER],
+    );
+  });
+
+  it('still refuses to remove one player who has been scored', async () => {
+    await expect(
+      database.owner.query('DELETE FROM event_players WHERE id = $1', [PLAYER]),
+    ).rejects.toThrow(/already has scores recorded/i);
+
+    const { rows } = await database.owner.query<{ count: string }>(
+      'SELECT count(*) FROM event_players WHERE id = $1',
+      [PLAYER],
+    );
+    expect(rows[0]?.count).toBe('1');
+  });
+
+  it('lets the event they were scored in be deleted, scores and all', async () => {
+    // Before 0016 an event became undeletable the moment anybody's first score went in, so a
+    // planner who set one up by mistake was stuck with it permanently.
+    await database.owner.query('DELETE FROM events WHERE id = $1', [EVENT]);
+
+    const gone = async (sql: string): Promise<string | undefined> =>
+      (await database.owner.query<{ count: string }>(sql, [EVENT])).rows[0]?.count;
+
+    expect(await gone('SELECT count(*) FROM events WHERE id = $1')).toBe('0');
+    expect(await gone('SELECT count(*) FROM event_players WHERE event_id = $1')).toBe('0');
+    expect(await gone('SELECT count(*) FROM rounds WHERE event_id = $1')).toBe('0');
+
+    const cards = await database.owner.query<{ count: string }>(
+      'SELECT count(*) FROM scorecards WHERE event_player_id = $1',
+      [PLAYER],
+    );
+    expect(cards.rows[0]?.count).toBe('0');
+  });
+});
+
 describe('the schema guards', () => {
   it('refuses to change a published ruleset', async () => {
     await expect(
@@ -505,13 +649,21 @@ describe('the schema guards', () => {
 
   it('silently ignores an attempt to change a player rating', async () => {
     // Append-only by RULE: UPDATE and DELETE do nothing rather than erroring.
+    const before = await database.owner.query<{ count: string }>(
+      'SELECT count(*) FROM player_ratings',
+    );
     await database.owner.query('UPDATE player_ratings SET rounded_value = 99');
     await database.owner.query('DELETE FROM player_ratings');
-    const { rows } = await database.owner.query<{ rounded_value: number; count: string }>(
-      'SELECT rounded_value, count(*) OVER () AS count FROM player_ratings',
+
+    const { rows } = await database.owner.query<{ rounded_value: number }>(
+      'SELECT rounded_value FROM player_ratings WHERE reason = $1 AND raw_value = 14.375',
+      ['event_carryover'],
     );
     expect(rows[0]?.rounded_value).toBe(14);
-    expect(rows[0]?.count).toBe('1');
+    const after = await database.owner.query<{ count: string }>(
+      'SELECT count(*) FROM player_ratings',
+    );
+    expect(after.rows[0]?.count).toBe(before.rows[0]?.count);
   });
 
   it('refuses an event that starts without a frozen ruleset snapshot', async () => {

@@ -25,7 +25,7 @@ import {
   suggestLapsedPlayerPtp,
   type StartingTarget,
 } from '@ddga/scoring-engine';
-import { CourseImportRejected, importCourse } from '../courses/import.ts';
+import { CourseAlreadyExists, CourseImportRejected, importCourse } from '../courses/import.ts';
 import { starterRuleset } from '../rulesets/starter.ts';
 import {
   importRosterRows,
@@ -291,12 +291,16 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
         if (error instanceof CourseImportRejected) {
           return { kind: 'rejected' as const, validation: error.validation };
         }
+        if (error instanceof CourseAlreadyExists) {
+          return { kind: 'duplicate' as const, message: error.message };
+        }
         throw error;
       }
     });
 
     if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
     if (result.value.kind === 'no-org') return c.json({ error: 'Create your group first.' }, 409);
+    if (result.value.kind === 'duplicate') return c.json({ error: result.value.message }, 409);
     if (result.value.kind === 'rejected') {
       return c.json(
         { error: 'The scorecard does not add up.', validation: result.value.validation },

@@ -25,7 +25,10 @@
     "courses:seed": "node --experimental-strip-types --env-file=.env apps/api/scripts/seed-courses.ts",
     "dev:stop": "bash scripts/stop-dev.sh",
     "rulesets:seed": "node --experimental-strip-types --env-file=.env apps/api/scripts/seed-ruleset.ts",
-    "roster:seed": "node --experimental-strip-types --env-file=.env apps/api/scripts/seed-roster.ts"
+    "roster:seed": "node --experimental-strip-types --env-file=.env apps/api/scripts/seed-roster.ts",
+    "db:tidy-dev": "bash scripts/tidy-dev-db.sh",
+    "history:seed": "node --experimental-strip-types --env-file=.env apps/api/scripts/seed-history.ts",
+    "gate2": "node --experimental-strip-types --env-file=.env apps/api/scripts/verify-gate2.ts"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",

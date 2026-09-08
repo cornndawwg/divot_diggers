@@ -35,9 +35,13 @@ try {
     const raw: unknown = JSON.parse(readFileSync(`${seedDir}/${file}`, 'utf8'));
     try {
       await client.query('BEGIN');
-      const outcome = await importCourse(client, orgId, null, raw);
+      const outcome = await importCourse(client, orgId, null, raw, { onDuplicateName: 'skip' });
       await client.query('COMMIT');
-      console.log(`  ${file}: ${outcome.teeSetIds.length} tee sets, ${outcome.holeCount} holes`);
+      console.log(
+        outcome.alreadyPresent
+          ? `  ${file}: already loaded, left alone`
+          : `  ${file}: ${outcome.teeSetIds.length} tee sets, ${outcome.holeCount} holes`,
+      );
     } catch (error) {
       await client.query('ROLLBACK');
       if (error instanceof CourseImportRejected) {

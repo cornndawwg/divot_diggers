@@ -11,6 +11,34 @@ export interface ImportOutcome {
   readonly teeSetIds: readonly string[];
   readonly holeCount: number;
   readonly validation: CourseValidation;
+  /** True when an existing course of the same name was returned rather than a new one made. */
+  readonly alreadyPresent: boolean;
+}
+
+export interface ImportOptions {
+  /**
+   * What to do when this group already has a course of the same name.
+   *
+   * `skip` returns the existing one untouched, which is what a re-run of a seed script wants.
+   * `refuse` stops and says so, which is what a person clicking Import wants — silently
+   * making a second copy leaves them a course list with three identical entries and no way
+   * to tell which is the real one.
+   * `duplicate` makes another anyway, for the genuine case of two courses sharing a name.
+   */
+  readonly onDuplicateName?: 'skip' | 'refuse' | 'duplicate';
+}
+
+export class CourseAlreadyExists extends Error {
+  readonly courseId: string;
+
+  constructor(name: string, courseId: string) {
+    super(
+      `This group already has a course called "${name}". Delete or rename that one first, ` +
+        'or import this under a different name.',
+    );
+    this.name = 'CourseAlreadyExists';
+    this.courseId = courseId;
+  }
 }
 
 export class CourseImportRejected extends Error {
@@ -39,11 +67,43 @@ export async function importCourse(
   orgId: string,
   createdBy: string | null,
   input: unknown,
+  options: ImportOptions = {},
 ): Promise<ImportOutcome> {
   const document: CourseDocument = courseDocumentSchema.parse(input);
   const validation = validateCourseDocument(document);
   if (!validation.valid) {
     throw new CourseImportRejected(validation);
+  }
+
+  // Importing the same course twice used to make a second copy of it, every time. Nothing
+  // said so, and a group that ran a seed script twice ended up choosing a tee set from a
+  // list showing Green six times.
+  const behaviour = options.onDuplicateName ?? 'refuse';
+  if (behaviour !== 'duplicate') {
+    const existing = await client.query<{ id: string }>(
+      'SELECT id FROM courses WHERE org_id = $1 AND lower(name) = lower($2) ORDER BY created_at LIMIT 1',
+      [orgId, document.course.name],
+    );
+    const existingId = existing.rows[0]?.id;
+    if (existingId !== undefined) {
+      if (behaviour === 'refuse') throw new CourseAlreadyExists(document.course.name, existingId);
+      const holes = await client.query<{ count: string }>(
+        `SELECT count(*) FROM course_holes h JOIN tee_sets t ON t.id = h.tee_set_id
+          WHERE t.course_id = $1`,
+        [existingId],
+      );
+      const tees = await client.query<{ id: string }>(
+        'SELECT id FROM tee_sets WHERE course_id = $1 ORDER BY name',
+        [existingId],
+      );
+      return {
+        courseId: existingId,
+        teeSetIds: tees.rows.map((row) => row.id),
+        holeCount: Number(holes.rows[0]?.count ?? 0),
+        validation,
+        alreadyPresent: true,
+      };
+    }
   }
 
   const hasEveryStrokeIndex = document.teeSets.every((teeSet) =>
@@ -118,5 +178,5 @@ export async function importCourse(
     }
   }
 
-  return { courseId, teeSetIds, holeCount, validation };
+  return { courseId, teeSetIds, holeCount, validation, alreadyPresent: false };
 }
