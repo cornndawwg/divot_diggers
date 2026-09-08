@@ -22,7 +22,8 @@
     "courses:import": "node --experimental-strip-types --env-file=.env apps/api/scripts/import-course.ts",
     "courses:import-for": "node --experimental-strip-types --env-file=.env apps/api/scripts/import-course-for.ts",
     "db:reset-dev": "bash scripts/reset-dev-db.sh",
-    "courses:seed": "node --experimental-strip-types --env-file=.env apps/api/scripts/seed-courses.ts"
+    "courses:seed": "node --experimental-strip-types --env-file=.env apps/api/scripts/seed-courses.ts",
+    "dev:stop": "bash scripts/stop-dev.sh"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",

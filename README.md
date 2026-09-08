@@ -66,8 +66,12 @@ pnpm dev:api                        # API + auth on http://localhost:8787
 pnpm dev:web                        # planner console on http://localhost:3000
 ```
 
-Leave both running and open http://localhost:3000. If either reports
-`EADDRINUSE`, a copy is already running — the error message tells you how to find and stop it.
+Leave both running and open http://localhost:3000. If either reports `EADDRINUSE`, a copy is
+already running:
+
+```
+pnpm dev:stop
+```
 On a remote machine, forward ports 3000 and 8787 (VS Code does this from its Ports panel).
 
 **One origin.** The browser only ever talks to port 3000. Next proxies `/api/*` through to the
