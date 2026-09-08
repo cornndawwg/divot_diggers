@@ -22,6 +22,8 @@ interface EventSummary {
 export default function CoursesPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [events, setEvents] = useState<EventSummary[]>([]);
+  const [eventId, setEventId] = useState('');
+  const [rosterSize, setRosterSize] = useState<number | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'signed-out'>('loading');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState('');
@@ -36,7 +38,18 @@ export default function CoursesPage() {
       return;
     }
     setCourses(((await coursesResponse.json()) as { courses: Course[] }).courses);
-    setEvents(((await eventsResponse.json()) as { events: EventSummary[] }).events);
+    const loaded = ((await eventsResponse.json()) as { events: EventSummary[] }).events;
+    setEvents(loaded);
+    const active = loaded[0]?.id ?? '';
+    setEventId(active);
+    if (active !== '') {
+      const players = await fetch(`${apiUrl}/api/events/${active}/players`, {
+        credentials: 'include',
+      });
+      setRosterSize(
+        players.ok ? ((await players.json()) as { players: unknown[] }).players.length : null,
+      );
+    }
     setState('ready');
   }, []);
 
@@ -111,6 +124,57 @@ export default function CoursesPage() {
         {courses.length === 0 ? 'None yet.' : `${courses.length} available.`}
       </p>
 
+      {events.length > 0 && (
+        <div className="card" style={{ marginBottom: '1rem' }}>
+          <div className="field">
+            <label htmlFor="event">Start rounds in</label>
+            <select
+              id="event"
+              value={eventId}
+              onChange={async (changed) => {
+                setEventId(changed.target.value);
+                const players = await fetch(
+                  `${apiUrl}/api/events/${changed.target.value}/players`,
+                  { credentials: 'include' },
+                );
+                setRosterSize(
+                  players.ok
+                    ? ((await players.json()) as { players: unknown[] }).players.length
+                    : null,
+                );
+              }}
+            >
+              {events.map((event) => (
+                <option key={event.id} value={event.id}>
+                  {event.name} ({event.year}) — {event.rounds}{' '}
+                  {event.rounds === 1 ? 'round' : 'rounds'}
+                </option>
+              ))}
+            </select>
+          </div>
+          {rosterSize === 0 && (
+            <p className="check fail">
+              This event has nobody on its roster yet, so a round on it cannot be grouped or
+              scored. Add players on the <Link href="/roster">Roster</Link> page first.
+            </p>
+          )}
+          {rosterSize !== null && rosterSize > 0 && (
+            <p className="hint">
+              {rosterSize} {rosterSize === 1 ? 'player' : 'players'} on this roster.
+            </p>
+          )}
+        </div>
+      )}
+
+      {events.length === 0 && (
+        <div className="card" style={{ marginBottom: '1rem' }}>
+          <p className="check fail">
+            No event yet. Create one on the <Link href="/roster">Roster</Link> page before
+            starting a round.
+          </p>
+        </div>
+      )}
+
       <div className="card">
         {message !== '' && <p className="ok">{message}</p>}
 
@@ -136,7 +200,7 @@ export default function CoursesPage() {
                 <button
                   type="button"
                   onClick={() => void startRound(course)}
-                  disabled={busy !== ''}
+                  disabled={busy !== '' || events.length === 0}
                 >
                   {busy === course.id ? 'Starting…' : 'Start round'}
                 </button>

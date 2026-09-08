@@ -54,7 +54,19 @@ export async function computeStandings(
     [eventId, [...competition.rounds]],
   );
 
-  const rounds: RoundRef[] = roundRows.rows.map((row) => {
+  // Only rounds somebody has actually been scored in. A round that exists but has not been
+  // played yet is not a round anybody missed, and counting it as one disqualifies the whole
+  // field halfway through an event.
+  const contested = await client.query<{ round_id: string }>(
+    `SELECT DISTINCT s.round_id FROM scorecards s
+       JOIN rounds r ON r.id = s.round_id
+      WHERE r.event_id = $1
+        AND (s.points_pulled_manual IS NOT NULL OR s.status <> 'not_started' OR s.did_not_play)`,
+    [eventId],
+  );
+  const played = new Set(contested.rows.map((row) => row.round_id));
+
+  const rounds: RoundRef[] = roundRows.rows.filter((row) => played.has(row.id)).map((row) => {
     const mode = row.hole_selection?.mode;
     const explicit = row.hole_selection?.holes?.length;
     const holesInPlay =

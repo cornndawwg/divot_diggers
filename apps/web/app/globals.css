@@ -135,3 +135,59 @@ table.scorecard input.tiny {
 }
 table.scorecard input.tiny.wide { width: 4.2rem; }
 table.scorecard tfoot td { border-top: 1px solid var(--line); padding-top: 0.4rem; }
+
+/* --- Navigation. Present on every signed-in page. --- */
+.nav {
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 1.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.nav-inner {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 0 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-height: 3.1rem;
+  flex-wrap: wrap;
+}
+.nav .brand {
+  font-weight: 700;
+  color: var(--green);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.nav ul {
+  list-style: none;
+  display: flex;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+}
+.nav ul a {
+  display: block;
+  padding: 0.45rem 0.7rem;
+  border-radius: 7px;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.nav ul a:hover { background: #f0f3f0; }
+.nav ul a[aria-current='page'] { background: var(--green); color: #fff; }
+.nav-end { display: flex; align-items: center; gap: 0.75rem; margin-left: auto; }
+.nav .who { font-size: 0.85rem; color: var(--muted); text-decoration: none; white-space: nowrap; }
+.nav .who:hover { color: var(--ink); }
+.nav-end button { font-size: 0.85rem; }
+@media (max-width: 40rem) {
+  .nav-inner { padding: 0.5rem 0.75rem; }
+  .nav ul a { padding: 0.4rem 0.55rem; font-size: 0.85rem; }
+  .nav .who { display: none; }
+}

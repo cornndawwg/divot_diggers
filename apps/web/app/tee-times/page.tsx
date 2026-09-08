@@ -45,6 +45,7 @@ export default function TeeTimesPage() {
   const [interval, setIntervalMinutes] = useState('10');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [rosterSize, setRosterSize] = useState<number | null>(null);
 
   const loadSheet = useCallback(async (round: string) => {
     const response = await fetch(`${apiUrl}/api/rounds/${round}/groups`, {
@@ -82,6 +83,13 @@ export default function TeeTimesPage() {
         : [];
       setRounds(loadedRounds);
 
+      const players = await fetch(`${apiUrl}/api/events/${activeEvent}/players`, {
+        credentials: 'include',
+      });
+      setRosterSize(
+        players.ok ? ((await players.json()) as { players: unknown[] }).players.length : null,
+      );
+
       const activeRound = round ?? loadedRounds[0]?.id ?? '';
       setRoundId(activeRound);
       if (activeRound !== '') await loadSheet(activeRound);
@@ -117,7 +125,12 @@ export default function TeeTimesPage() {
       setMessage('Could not lay out the sheet.');
       return;
     }
-    setMessage('Suggested. Nothing is fixed until you lock it.');
+    const made = ((await response.json()) as { groups: number }).groups;
+    setMessage(
+      made === 0
+        ? 'Nobody on this roster to group. Add players on the Roster page.'
+        : `${made} ${made === 1 ? 'group' : 'groups'} suggested. Nothing is fixed until you lock it.`,
+    );
     await loadSheet(roundId);
   }
 
@@ -215,9 +228,16 @@ export default function TeeTimesPage() {
             ))}
           </select>
         </div>
+        {rosterSize === 0 && (
+          <p className="check fail">
+            Nobody is on this event&apos;s roster, so there is nobody to group. Add players on
+            the <Link href="/roster">Roster</Link> page.
+          </p>
+        )}
         {rounds.length === 0 ? (
-          <p className="hint">
-            This event has no rounds yet. Start one from <Link href="/courses">Courses</Link>.
+          <p className="check fail">
+            This event has no rounds yet. Start one from <Link href="/courses">Courses</Link>,
+            making sure you pick this event.
           </p>
         ) : (
           <div className="field">
@@ -241,7 +261,7 @@ export default function TeeTimesPage() {
         {message !== '' && <p className="ok">{message}</p>}
       </div>
 
-      {rounds.length > 0 && (
+      {rounds.length > 0 && rosterSize !== 0 && (
         <>
           <div className="card">
             <h2 className="section">Lay out the sheet</h2>

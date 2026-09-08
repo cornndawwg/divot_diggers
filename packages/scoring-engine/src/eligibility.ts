@@ -27,7 +27,10 @@ export function evaluateEligibility(
   const roundsRequired = competition.eligibility.minimumRoundsCompleted;
   const missedRoundsDisqualify = competition.target.didNotPlay.standing === 'disqualify';
   const shortOfRequirement = result.roundsPlayed < roundsRequired;
-  const eligible = !(missedRoundsDisqualify && shortOfRequirement);
+  // Both conditions, not either. Halfway through a three round event everybody is short of
+  // three, but nobody has missed anything — the rounds have not happened yet. What
+  // disqualifies a player is missing a round the rest of the field played.
+  const eligible = !(missedRoundsDisqualify && shortOfRequirement && result.roundsMissed > 0);
 
   return {
     eligible,

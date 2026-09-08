@@ -4,6 +4,7 @@ import {
   DID_NOT_PLAY,
   applyRounds,
   evaluateEligibility,
+  runIndividualTarget,
   standings,
   suggestLapsedPlayerPtp,
 } from '../src/index';
@@ -221,5 +222,42 @@ describe('a player coming back after a gap', () => {
       'Returning after missing 2 events on a target of 24, now 3 strokes better than at their ' +
         'last appearance, so the target moves up by 3 to 27. The planner confirms this.',
     );
+  });
+});
+
+describe('part way through an event', () => {
+  // The bug this guards: with one round of three played, every player is short of the three
+  // round minimum, and treating that as a disqualification greys out the entire leaderboard
+  // halfway through a trip.
+  it('ranks everyone after the first round of three', () => {
+    const result = applyRounds(20, [24], divotDiggers);
+    const verdict = evaluateEligibility(result, competition);
+    expect(verdict.roundsPlayed).toBe(1);
+    expect(verdict.roundsMissed).toBe(0);
+    expect(verdict.eligible).toBe(true);
+    expect(verdict.reason).toBeNull();
+  });
+
+  it('still disqualifies someone who missed a round the others played', () => {
+    const result = applyRounds(20, [24, DID_NOT_PLAY], divotDiggers);
+    const verdict = evaluateEligibility(result, competition);
+    expect(verdict.roundsMissed).toBe(1);
+    expect(verdict.eligible).toBe(false);
+  });
+
+  it('ranks a full attendance player at the end of the event', () => {
+    const verdict = evaluateEligibility(applyRounds(20, [24, 25, 29], divotDiggers), competition);
+    expect(verdict.eligible).toBe(true);
+  });
+
+  it('gives a mid-event leaderboard real positions', () => {
+    const field = [
+      { player: 'A', startingTarget: 20, pointsPulled: [24] },
+      { player: 'B', startingTarget: 20, pointsPulled: [30] },
+      { player: 'C', startingTarget: 20, pointsPulled: [18] },
+    ];
+    const results = runIndividualTarget(field, competition);
+    expect(results.every((entry) => entry.position !== null)).toBe(true);
+    expect(results.find((entry) => entry.player === 'B')?.position).toBe(1);
   });
 });

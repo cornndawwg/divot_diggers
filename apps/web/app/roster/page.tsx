@@ -293,6 +293,15 @@ export default function RosterPage() {
         {roster.length} {roster.length === 1 ? 'player' : 'players'}
       </p>
 
+      {roster.length === 0 && (
+        <div className="card" style={{ marginBottom: '1rem' }}>
+          <p className="hint">
+            Nothing else works until somebody is on this roster — a round cannot be grouped or
+            scored without one. Pick from the list below, or add someone new.
+          </p>
+        </div>
+      )}
+
       <div className="card" style={{ marginBottom: '1rem' }}>
         <div className="field">
           <label htmlFor="event">Event</label>
