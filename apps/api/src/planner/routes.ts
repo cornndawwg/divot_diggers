@@ -33,6 +33,7 @@ import {
   type RosterImportRow,
 } from '../roster/import.ts';
 import { computeStandings, rebuildResults } from '../scoring/standings.ts';
+import { ensureTeams, readCupSetup, suggestTeams } from '../cup/setup.ts';
 
 /**
  * Stamped onto every cached result. A bug fix in the engine changes numbers, and the archive
@@ -1239,6 +1240,182 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
       rows: result.value.outcome,
       added: result.value.outcome.filter((row) => row.status === 'added').length,
     });
+  });
+
+  // --- the cup ---------------------------------------------------------------
+  //
+  // Setting it up: two sides, a captain each, and who plays for whom. Playing it — the live
+  // draft, matchups and match cards — is phase 4.
+
+  app.get('/api/events/:id/cup', async (c) => {
+    const eventId = c.req.param('id');
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const cup = await cupConfigFor(client, eventId);
+      if (cup === null) return null;
+      await ensureTeams(client, eventId, cup);
+      const setup = await readCupSetup(client, eventId, cup);
+      return {
+        name: cup.name,
+        pointsPerMatch: cup.pointsPerMatch,
+        sessions: cup.sessions.map((session) => ({
+          roundId: session.roundId,
+          format: session.format,
+          playersPerSide: session.playersPerSide,
+          holes: session.holes,
+          declaredMatches: session.matches,
+        })),
+        ...setup,
+      };
+    });
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (result.value === null) {
+      return c.json(
+        { error: 'This event has no cup in its rules, so there are no teams to set up.' },
+        409,
+      );
+    }
+    return c.json(result.value);
+  });
+
+  /** Rename a side, appoint its captain, or give it a colour. */
+  app.post('/api/events/:id/cup/teams/:teamId', async (c) => {
+    const eventId = c.req.param('id');
+    const teamId = c.req.param('teamId');
+    const body = (await c.req.json().catch(() => ({}))) as {
+      name?: unknown;
+      captainPersonId?: unknown;
+      colour?: unknown;
+    };
+
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      // A captain has to be on the roster, and captaining implies playing for that side.
+      const captain =
+        typeof body.captainPersonId === 'string' && body.captainPersonId !== ''
+          ? body.captainPersonId
+          : null;
+
+      if (captain !== null) {
+        const onRoster = await client.query<{ id: string }>(
+          'SELECT id FROM event_players WHERE event_id = $1 AND person_id = $2',
+          [eventId, captain],
+        );
+        const eventPlayerId = onRoster.rows[0]?.id;
+        if (eventPlayerId === undefined) return { kind: 'not-on-roster' as const };
+
+        // One team per player is enforced by the database; move them rather than fail.
+        await client.query(
+          `DELETE FROM cup_team_members m USING cup_teams t
+            WHERE m.cup_team_id = t.id AND t.event_id = $1 AND m.event_player_id = $2`,
+          [eventId, eventPlayerId],
+        );
+        await client.query(
+          'INSERT INTO cup_team_members (cup_team_id, event_player_id) VALUES ($1,$2)',
+          [teamId, eventPlayerId],
+        );
+      }
+
+      const updated = await client.query(
+        `UPDATE cup_teams
+            SET name = coalesce($3, name),
+                colour = coalesce($4, colour),
+                captain_person_id = CASE WHEN $5 THEN $6::uuid ELSE captain_person_id END
+          WHERE id = $1 AND event_id = $2`,
+        [
+          teamId,
+          eventId,
+          typeof body.name === 'string' && body.name.trim() !== '' ? body.name.trim() : null,
+          typeof body.colour === 'string' && body.colour.trim() !== '' ? body.colour.trim() : null,
+          body.captainPersonId !== undefined,
+          captain,
+        ],
+      );
+      return updated.rowCount === 0
+        ? ({ kind: 'no-team' as const })
+        : ({ kind: 'saved' as const });
+    });
+
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (result.value.kind === 'no-team') return c.json({ error: 'No such team.' }, 404);
+    if (result.value.kind === 'not-on-roster') {
+      return c.json({ error: 'A captain has to be on the roster first.' }, 409);
+    }
+    return c.json({ saved: true });
+  });
+
+  /** Put a golfer on a side, or take them off with no team given. */
+  app.post('/api/events/:id/cup/assign', async (c) => {
+    const eventId = c.req.param('id');
+    const body = (await c.req.json().catch(() => ({}))) as {
+      personId?: unknown;
+      teamId?: unknown;
+    };
+    const personId = typeof body.personId === 'string' ? body.personId : '';
+    if (personId === '') return c.json({ error: 'Choose a golfer.' }, 400);
+    const teamId = typeof body.teamId === 'string' && body.teamId !== '' ? body.teamId : null;
+
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const onRoster = await client.query<{ id: string }>(
+        'SELECT id FROM event_players WHERE event_id = $1 AND person_id = $2',
+        [eventId, personId],
+      );
+      const eventPlayerId = onRoster.rows[0]?.id;
+      if (eventPlayerId === undefined) return { kind: 'not-on-roster' as const };
+
+      await client.query(
+        `DELETE FROM cup_team_members m USING cup_teams t
+          WHERE m.cup_team_id = t.id AND t.event_id = $1 AND m.event_player_id = $2`,
+        [eventId, eventPlayerId],
+      );
+      if (teamId !== null) {
+        await client.query(
+          'INSERT INTO cup_team_members (cup_team_id, event_player_id) VALUES ($1,$2)',
+          [teamId, eventPlayerId],
+        );
+      }
+      // Taking someone off a side also gives up the captaincy of it.
+      await client.query(
+        `UPDATE cup_teams SET captain_person_id = NULL
+          WHERE event_id = $1 AND captain_person_id = $2
+            AND NOT EXISTS (
+              SELECT 1 FROM cup_team_members m
+               WHERE m.cup_team_id = cup_teams.id AND m.event_player_id = $3)`,
+        [eventId, personId, eventPlayerId],
+      );
+      return { kind: 'saved' as const };
+    });
+
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (result.value.kind === 'not-on-roster') {
+      return c.json({ error: 'They are not on this event\u2019s roster.' }, 409);
+    }
+    return c.json({ saved: true });
+  });
+
+  /** An even split by target, as a starting point for the captains to argue with. */
+  app.post('/api/events/:id/cup/suggest', async (c) => {
+    const eventId = c.req.param('id');
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const cup = await cupConfigFor(client, eventId);
+      if (cup === null) return null;
+      await ensureTeams(client, eventId, cup);
+      const teams = await client.query<{ id: string }>(
+        'SELECT id FROM cup_teams WHERE event_id = $1 ORDER BY key',
+        [eventId],
+      );
+      const placed = await suggestTeams(
+        client,
+        eventId,
+        teams.rows.map((row) => row.id),
+      );
+      // A suggested split does not appoint captains; that is a decision, not arithmetic.
+      await client.query('UPDATE cup_teams SET captain_person_id = NULL WHERE event_id = $1', [
+        eventId,
+      ]);
+      return placed;
+    });
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (result.value === null) return c.json({ error: 'This event has no cup in its rules.' }, 409);
+    return c.json({ placed: result.value });
   });
 
   // --- tee times and groupings ----------------------------------------------

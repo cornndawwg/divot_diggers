@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { suggestGroups, suggestTeeTimes, type GroupablePlayer } from '../src/index.ts';
+import {
+  splitIntoSides,
+  suggestGroups,
+  suggestTeeTimes,
+  type GroupablePlayer,
+} from '../src/index.ts';
 
 /** Twelve players with distinct targets, strongest 48 down to weakest 15. */
 const FIELD: GroupablePlayer<string>[] = [
@@ -137,5 +142,52 @@ describe('tee times', () => {
     expect(() => suggestTeeTimes('half eight', 4, 10)).toThrow(/looks like/);
     expect(() => suggestTeeTimes('25:00', 4, 10)).toThrow(/not a time of day/);
     expect(() => suggestTeeTimes('08:00', 4, 0)).toThrow(/at least a minute/);
+  });
+});
+
+describe('splitting a field into two sides', () => {
+  it('makes the sides level, where a serpentine would not', () => {
+    // The same twelve players a serpentine leaves eleven points apart.
+    const split = splitIntoSides(FIELD);
+    expect(split.a).toHaveLength(6);
+    expect(split.b).toHaveLength(6);
+    expect(split.gap).toBeLessThanOrEqual(2);
+    expect(split.totalA + split.totalB).toBe(387);
+  });
+
+  it('places everyone exactly once', () => {
+    const split = splitIntoSides(FIELD);
+    const all = [...split.a, ...split.b];
+    expect(all).toHaveLength(FIELD.length);
+    expect(new Set(all).size).toBe(FIELD.length);
+  });
+
+  it('splits an odd roster as evenly as it can', () => {
+    const five = [48, 46, 41, 40, 38].map((target, index) => ({ player: `P${index}`, target }));
+    const split = splitIntoSides(five);
+    expect(Math.abs(split.a.length - split.b.length)).toBe(1);
+    expect([...split.a, ...split.b]).toHaveLength(5);
+  });
+
+  it('handles a field of two, and of none', () => {
+    const pair = splitIntoSides([
+      { player: 'A', target: 40 },
+      { player: 'B', target: 20 },
+    ]);
+    expect(pair.a).toHaveLength(1);
+    expect(pair.b).toHaveLength(1);
+    expect(pair.gap).toBe(20);
+
+    const empty = splitIntoSides([]);
+    expect(empty.a).toEqual([]);
+    expect(empty.b).toEqual([]);
+    expect(empty.gap).toBe(0);
+  });
+
+  it('is level when every player is equal', () => {
+    const same = Array.from({ length: 8 }, (_, index) => ({ player: `P${index}`, target: 30 }));
+    const split = splitIntoSides(same);
+    expect(split.gap).toBe(0);
+    expect(split.totalA).toBe(120);
   });
 });

@@ -108,3 +108,90 @@ export function suggestTeeTimes(
     return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
   });
 }
+
+
+export interface TwoSides<TPlayer> {
+  readonly a: readonly TPlayer[];
+  readonly b: readonly TPlayer[];
+  readonly totalA: number;
+  readonly totalB: number;
+  /** How far apart the two sides are on combined target. Lower is a fairer match. */
+  readonly gap: number;
+}
+
+/**
+ * Split a field into two even sides of comparable strength.
+ *
+ * A serpentine is the right shape for tee groups but a poor one for two teams: across twelve
+ * players it leaves the sides eleven points apart, which is a lopsided cup. This deals the
+ * strongest player to whichever side is currently behind, then looks for single swaps that
+ * bring the two totals closer — the same thing two captains do by eye, and it settles within
+ * a point or two.
+ *
+ * Sides stay equal in size, or differ by one when the roster is odd, because a cup is played
+ * head to head.
+ */
+export function splitIntoSides<TPlayer>(
+  entries: readonly GroupablePlayer<TPlayer>[],
+): TwoSides<TPlayer> {
+  const ranked = entries
+    .map((entry, index) => ({ entry, index }))
+    .sort((a, b) => b.entry.target - a.entry.target || a.index - b.index)
+    .map((row) => row.entry);
+
+  const capacity = Math.ceil(ranked.length / 2);
+  const sides: GroupablePlayer<TPlayer>[][] = [[], []];
+  const totals = [0, 0];
+
+  for (const entry of ranked) {
+    // Whichever side is behind, unless it is already full.
+    const behind = (totals[0] ?? 0) <= (totals[1] ?? 0) ? 0 : 1;
+    const target = (sides[behind]?.length ?? 0) < capacity ? behind : 1 - behind;
+    sides[target]?.push(entry);
+    totals[target] = (totals[target] ?? 0) + entry.target;
+  }
+
+  // One pass of swaps. Each swap of x out of A for y out of B moves the difference by
+  // 2(y - x), so the best swap is the one closest to halving it.
+  let improved = true;
+  while (improved) {
+    improved = false;
+    const difference = (totals[0] ?? 0) - (totals[1] ?? 0);
+    if (difference === 0) break;
+
+    const left = sides[0] ?? [];
+    const right = sides[1] ?? [];
+    let bestA = -1;
+    let bestB = -1;
+    let bestGap = Math.abs(difference);
+
+    left.forEach((x, ai) => {
+      right.forEach((y, bi) => {
+        const gap = Math.abs(difference - 2 * (x.target - y.target));
+        if (gap < bestGap) {
+          bestGap = gap;
+          bestA = ai;
+          bestB = bi;
+        }
+      });
+    });
+
+    const x = bestA === -1 ? undefined : left[bestA];
+    const y = bestB === -1 ? undefined : right[bestB];
+    if (x !== undefined && y !== undefined) {
+      left[bestA] = y;
+      right[bestB] = x;
+      totals[0] = (totals[0] ?? 0) - x.target + y.target;
+      totals[1] = (totals[1] ?? 0) - y.target + x.target;
+      improved = true;
+    }
+  }
+
+  return {
+    a: (sides[0] ?? []).map((entry) => entry.player),
+    b: (sides[1] ?? []).map((entry) => entry.player),
+    totalA: totals[0] ?? 0,
+    totalB: totals[1] ?? 0,
+    gap: Math.abs((totals[0] ?? 0) - (totals[1] ?? 0)),
+  };
+}

@@ -70,7 +70,7 @@ describe('the test connection is genuinely unprivileged', () => {
     expect(rows[0]?.rolbypassrls).toBe(false);
   });
 
-  it('can delete from exactly five tables and nowhere else', async () => {
+  it('can delete from exactly seven tables and nowhere else', async () => {
     // A stray DELETE grant is how history quietly disappears. Every one of these is either
     // an arrangement that gets rebuilt or a cache: roster entries, the derived results, and
     // the tee sheet, which is replaced wholesale each time it is laid out. Ratings are
@@ -82,6 +82,8 @@ describe('the test connection is genuinely unprivileged', () => {
       [database.appUserRole],
     );
     expect(rows.map((row) => row.table_name)).toEqual([
+      'cup_team_members',
+      'cup_teams',
       'dogfight_results',
       'event_players',
       'event_roles',

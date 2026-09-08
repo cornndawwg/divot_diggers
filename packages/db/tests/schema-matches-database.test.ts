@@ -145,7 +145,7 @@ describe('the guarantees the migrations carry', () => {
     expect(rows[0]?.count).toBe('0');
   });
 
-  it('carries 62 policies, and accounts for every one', async () => {
+  it('carries 69 policies, and accounts for every one', async () => {
     const { rows } = await pool.query<{ count: string }>(
       "SELECT count(*) FROM pg_policies WHERE schemaname = 'public'",
     );
@@ -158,7 +158,8 @@ describe('the guarantees the migrations carry', () => {
     //   0010  scorecard_write, scorecard_update, dogfight_result_write,
     //         dogfight_result_update, dogfight_result_delete
     //   0011  read and write for the ten child tables the baseline left unprotected
-    expect(rows[0]?.count).toBe('62');
+    //   0013  cup teams, their membership and sessions, so the planner can set the cup up
+    expect(rows[0]?.count).toBe('69');
   });
 
   it('protects a scored player from being deleted', async () => {

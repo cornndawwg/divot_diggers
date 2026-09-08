@@ -75,7 +75,7 @@ export async function createAuthHarness(name: string): Promise<AuthHarness> {
   // DELETE on three tables only. Two are roster entries, taken off when someone drops out.
   // The third is the derived results cache, which is rebuilt from scorecards and so loses
   // nothing when cleared. Scores and ratings are never deleted by the app.
-  await privilegedPool.query(`GRANT DELETE ON event_players, event_roles, dogfight_results, tee_groups, tee_group_members TO ${role}`);
+  await privilegedPool.query(`GRANT DELETE ON event_players, event_roles, dogfight_results, tee_groups, tee_group_members, cup_teams, cup_team_members TO ${role}`);
 
   const domainPool = new Pool({ connectionString: urlFor(name, { name: role, password }) });
   const mailer = createCapturingMailer();

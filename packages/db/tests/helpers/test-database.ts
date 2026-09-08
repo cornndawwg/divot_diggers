@@ -80,7 +80,7 @@ export async function createTestDatabase(name: string): Promise<TestDatabase> {
   // DELETE on three tables only. Two are roster entries, taken off when someone drops out.
   // The third is the derived results cache, which is rebuilt from scorecards and so loses
   // nothing when cleared. Scores and ratings are never deleted by the app.
-  await owner.query(`GRANT DELETE ON event_players, event_roles, dogfight_results, tee_groups, tee_group_members TO ${role}`);
+  await owner.query(`GRANT DELETE ON event_players, event_roles, dogfight_results, tee_groups, tee_group_members, cup_teams, cup_team_members TO ${role}`);
 
   const appUser = new Pool({ connectionString: urlFor(name, { name: role, password }) });
 

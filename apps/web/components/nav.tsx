@@ -17,6 +17,7 @@ const LINKS = [
   { href: '/courses', label: 'Courses' },
   { href: '/rounds', label: 'Rounds' },
   { href: '/tee-times', label: 'Tee times' },
+  { href: '/cup', label: 'Cup' },
   { href: '/standings', label: 'Standings' },
   { href: '/rulesets', label: 'Rules' },
 ];

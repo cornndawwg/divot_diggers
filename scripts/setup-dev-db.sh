@@ -48,7 +48,7 @@ psql "$DATABASE_URL" -qtAc "GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO ${R
 # DELETE on three tables only. Two are roster entries, taken off when someone drops out. The
 # third is the derived results cache, rebuilt from scorecards and so lossless to clear.
 # Scores and ratings are never deleted by the app.
-psql "$DATABASE_URL" -qtAc "GRANT DELETE ON event_players, event_roles, dogfight_results, tee_groups, tee_group_members TO ${ROLE}" >/dev/null || exit 1
+psql "$DATABASE_URL" -qtAc "GRANT DELETE ON event_players, event_roles, dogfight_results, tee_groups, tee_group_members, cup_teams, cup_team_members TO ${ROLE}" >/dev/null || exit 1
 
 # Rewrite APP_DATABASE_URL in .env, in place, without disturbing anything else.
 APP_URL="${BASE/\/\/*@//\/${ROLE}:${APP_PASSWORD}@}"
