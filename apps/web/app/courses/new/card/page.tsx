@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { courseDocumentSchema, validateCourseDocument } from '@ddga/types';
 import { apiUrl } from '../../../../lib/auth-client';
+import { parseScorecard } from '../../../../lib/csv';
+import { SAMPLE_SCORECARD_CSV, downloadCsv } from '../../../../lib/samples';
 
 /**
  * The whole scorecard, typed in.
@@ -49,6 +51,8 @@ export default function FullCardPage() {
   const [teeSets, setTeeSets] = useState<TeeSetDraft[]>(() => [emptyTeeSet('Championship', 18)]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [csv, setCsv] = useState('');
+  const [csvNote, setCsvNote] = useState('');
 
   const holes = useMemo(
     () => Array.from({ length: holeCount }, (_, index) => index + 1),
@@ -179,6 +183,40 @@ export default function FullCardPage() {
     router.push('/courses');
   }
 
+  /**
+   * Read a printed card in one paste.
+   *
+   * Any column that is not hole, par or stroke index is taken as a tee set named by its
+   * heading, which is how Blue/White/Green/Red end up as tee names with nothing configured.
+   */
+  function readCsv(text: string) {
+    const parsed = parseScorecard(text);
+    if (parsed.holes.length === 0) {
+      setCsvNote(parsed.problems.join(' ') || 'Nothing readable in that.');
+      return;
+    }
+    setHoleCount(parsed.holes.length > 9 ? 18 : 9);
+    setPars(parsed.holes.map((hole) => String(hole.par)));
+    setIndexes(parsed.holes.map((hole) => (hole.strokeIndex === null ? '' : String(hole.strokeIndex))));
+    const usable = parsed.teeSets.filter((tee) => tee.yardages.some((value) => value !== null));
+    if (usable.length > 0) {
+      setTeeSets(
+        usable.map((tee) => ({
+          name: tee.name,
+          gender: 'mens' as const,
+          courseRating: '',
+          slopeRating: '',
+          yardages: tee.yardages.map((value) => (value === null ? '' : String(value))),
+        })),
+      );
+    }
+    setCsvNote(
+      `Read ${parsed.holes.length} holes and ${usable.length} tee ${usable.length === 1 ? 'set' : 'sets'}. ` +
+        'Check it below, add ratings and slopes if you want them, then save.' +
+        (parsed.problems.length > 0 ? ` ${parsed.problems.join(' ')}` : ''),
+    );
+  }
+
   return (
     <>
       <h1>Type in a scorecard</h1>
@@ -201,6 +239,58 @@ export default function FullCardPage() {
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="card" style={{ marginTop: '1rem' }}>
+        <h2 className="section">Or paste the card</h2>
+        <p className="hint" style={{ marginBottom: '0.6rem' }}>
+          A row per hole, with Hole and Par columns and one column per tee. OUT, IN and TOTAL
+          rows are ignored. Everything lands in the table below for checking before it saves.
+        </p>
+        <p className="note" style={{ margin: '0 0 0.7rem' }}>
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => downloadCsv('scorecard-template.csv', SAMPLE_SCORECARD_CSV)}
+          >
+            Download a sample
+          </button>
+          {' · '}
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => {
+              setCsv(SAMPLE_SCORECARD_CSV);
+              readCsv(SAMPLE_SCORECARD_CSV);
+            }}
+          >
+            Try it with the sample
+          </button>
+        </p>
+        <input
+          type="file"
+          accept=".csv,.txt,text/csv,text/plain"
+          aria-label="Choose a scorecard CSV"
+          onChange={async (event) => {
+            const file = event.target.files?.[0];
+            if (file === undefined) return;
+            const text = await file.text();
+            setCsv(text);
+            readCsv(text);
+          }}
+          style={{ marginBottom: '0.6rem' }}
+        />
+        <textarea
+          value={csv}
+          onChange={(event) => setCsv(event.target.value)}
+          rows={4}
+          aria-label="Paste a scorecard"
+          placeholder={'Hole,Par,SI,Blue,White\n1,4,3,449,414'}
+        />
+        <button type="button" onClick={() => readCsv(csv)} disabled={csv.trim() === ''} style={{ marginTop: '0.5rem' }}>
+          Read this card
+        </button>
+        {csvNote !== '' && <p className="ok" style={{ marginTop: '0.7rem' }}>{csvNote}</p>}
       </div>
 
       <div className="card" style={{ marginTop: '1rem' }}>

@@ -162,3 +162,124 @@ export function parseRoster(text: string): RosterParse {
   if (rows.length === 0) problems.push('No rows with a name in them.');
   return { rows, columns, problems };
 }
+
+
+// ---------------------------------------------------------------------------
+// Scorecards
+// ---------------------------------------------------------------------------
+
+export interface ScorecardParse {
+  /** One entry per tee set column found, in the order they appeared. */
+  readonly teeSets: { name: string; yardages: (number | null)[] }[];
+  readonly holes: { holeNumber: number; par: number; strokeIndex: number | null }[];
+  readonly problems: string[];
+}
+
+const HOLE_NAMES = ['hole', 'holeno', 'holenumber', 'no', '#'];
+const PAR_NAMES = ['par'];
+const SI_NAMES = ['si', 'strokeindex', 'handicap', 'hcp', 'index', 'stroke'];
+
+/**
+ * Read a scorecard laid out the way a course prints one: a row per hole, with par and stroke
+ * index in their own columns and one column per tee.
+ *
+ * Any column that is not hole, par or stroke index is taken to be a tee set named by its
+ * heading — which is how the colours end up as tee names without anyone configuring anything.
+ * Rows whose hole number is not a number (OUT, IN, TOTAL) are ignored, since those are the
+ * printed subtotals rather than holes.
+ */
+export function parseScorecard(text: string): ScorecardParse {
+  const table = parseDelimited(text);
+  const problems: string[] = [];
+  if (table.length < 2) {
+    return { teeSets: [], holes: [], problems: ['Nothing to read.'] };
+  }
+
+  const header = table[0] ?? [];
+  const keys = header.map(normalise);
+  const holeAt = keys.findIndex((key) => HOLE_NAMES.includes(key));
+  const parAt = keys.findIndex((key) => PAR_NAMES.includes(key));
+  const siAt = keys.findIndex((key) => SI_NAMES.includes(key));
+
+  if (holeAt === -1 || parAt === -1) {
+    return {
+      teeSets: [],
+      holes: [],
+      problems: ['The card needs a Hole column and a Par column.'],
+    };
+  }
+
+  const teeColumns = header
+    .map((label, index) => ({ label: label.trim(), index }))
+    .filter((column) => ![holeAt, parAt, siAt].includes(column.index) && column.label !== '');
+
+  const holes: ScorecardParse['holes'] = [];
+  const yardages: (number | null)[][] = teeColumns.map(() => []);
+
+  for (const cells of table.slice(1)) {
+    const holeNumber = Number((cells[holeAt] ?? '').trim());
+    if (!Number.isInteger(holeNumber) || holeNumber < 1) continue; // OUT / IN / TOTAL rows
+
+    const par = Number((cells[parAt] ?? '').trim());
+    if (!Number.isInteger(par)) {
+      problems.push(`Hole ${holeNumber}: "${cells[parAt] ?? ''}" is not a par.`);
+      continue;
+    }
+
+    const rawIndex = siAt === -1 ? '' : (cells[siAt] ?? '').trim();
+    const strokeIndex = rawIndex === '' ? null : Number(rawIndex);
+    if (strokeIndex !== null && !Number.isInteger(strokeIndex)) {
+      problems.push(`Hole ${holeNumber}: "${rawIndex}" is not a stroke index.`);
+    }
+
+    holes.push({
+      holeNumber,
+      par,
+      strokeIndex: strokeIndex !== null && Number.isInteger(strokeIndex) ? strokeIndex : null,
+    });
+
+    teeColumns.forEach((column, position) => {
+      const raw = (cells[column.index] ?? '').trim().replace(/,/g, '');
+      const value = raw === '' || raw === '-' ? null : Number(raw);
+      yardages[position]?.push(Number.isFinite(value as number) ? (value as number) : null);
+    });
+  }
+
+  if (holes.length === 0) problems.push('No hole rows found.');
+
+  return {
+    teeSets: teeColumns.map((column, position) => ({
+      name: column.label,
+      yardages: yardages[position] ?? [],
+    })),
+    holes,
+    problems,
+  };
+}
+
+/** Turn a parsed card into the course document the API accepts. */
+export function scorecardToCourse(
+  name: string,
+  parsed: ScorecardParse,
+): Record<string, unknown> {
+  const usable = parsed.teeSets.filter((tee) => tee.yardages.some((value) => value !== null));
+  const teeSets = (usable.length > 0 ? usable : [{ name: 'Default', yardages: [] }]).map((tee) => {
+    const total = tee.yardages.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+    return {
+      name: tee.name,
+      holes: parsed.holes.map((hole, index) => ({
+        holeNumber: hole.holeNumber,
+        par: hole.par,
+        ...(hole.strokeIndex === null ? {} : { strokeIndex: hole.strokeIndex }),
+        ...(tee.yardages[index] == null ? {} : { yardage: tee.yardages[index] }),
+      })),
+      parTotal: parsed.holes.reduce((sum, hole) => sum + hole.par, 0),
+      ...(total > 0 ? { yardageTotal: total } : {}),
+    };
+  });
+
+  return {
+    course: { name, totalHoles: parsed.holes.length, source: 'manual' },
+    teeSets,
+  };
+}

@@ -25,8 +25,7 @@ export default function CoursesPage() {
   const [eventId, setEventId] = useState('');
   const [rosterSize, setRosterSize] = useState<number | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'signed-out'>('loading');
-  const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState('');
+  const [message] = useState('');
 
   const load = useCallback(async () => {
     const [coursesResponse, eventsResponse] = await Promise.all([
@@ -56,52 +55,6 @@ export default function CoursesPage() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  /**
-   * Start a round on this course. A round belongs to an event, so if there is no event yet
-   * one is created first — the parking-lot case is someone who has just installed this and
-   * wants to play, not someone who has already set up a season.
-   */
-  async function startRound(course: Course) {
-    setBusy(course.id);
-    setMessage('');
-
-    let eventId = events[0]?.id;
-    if (eventId === undefined) {
-      const created = await fetch(`${apiUrl}/api/events`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'Casual play', year: new Date().getFullYear() }),
-      });
-      if (created.status === 409) {
-        setBusy('');
-        setMessage('Create your group first, on the Account page.');
-        return;
-      }
-      eventId = ((await created.json()) as { id: string }).id;
-    }
-
-    const response = await fetch(`${apiUrl}/api/rounds`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        eventId,
-        courseId: course.id,
-        name: course.name,
-        holeSelection: { mode: course.totalHoles === 9 ? 'front9' : 'all' },
-      }),
-    });
-    setBusy('');
-
-    if (!response.ok) {
-      setMessage('Could not start the round.');
-      return;
-    }
-    setMessage(`Round started on ${course.name}. ${course.totalHoles} holes, ready to score.`);
-    await load();
-  }
 
   if (state === 'loading') return <div className="card">Loading…</div>;
   if (state === 'signed-out') {
@@ -197,13 +150,9 @@ export default function CoursesPage() {
                     {course.teeSets > 1 ? ` · ${course.teeSets} tee sets` : ''}
                   </span>
                 </span>
-                <button
-                  type="button"
-                  onClick={() => void startRound(course)}
-                  disabled={busy !== '' || events.length === 0}
-                >
-                  {busy === course.id ? 'Starting…' : 'Start round'}
-                </button>
+                <Link href={`/rounds/new?course=${course.id}`}>
+                  <button type="button">Schedule a round</button>
+                </Link>
               </li>
             ))}
           </ul>

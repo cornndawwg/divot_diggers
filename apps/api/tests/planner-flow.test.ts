@@ -156,7 +156,9 @@ describe('the parking-lot path', () => {
     expect(rows[0]?.course_name).toBe('Parking Lot Muni');
     expect(rows[0]?.tee_set).toBe('Default');
     expect(rows[0]?.hole_selection.mode).toBe('front9');
-    expect(rows[0]?.status).toBe('in_progress');
+    // Scheduled, not in progress: a round on the sheet has not been played yet, and the
+    // difference is what lets a planner set one up weeks ahead.
+    expect(rows[0]?.status).toBe('scheduled');
   });
 
   it('rejects a course whose pars contradict a printed total', async () => {

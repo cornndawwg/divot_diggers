@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { apiUrl } from '../../lib/auth-client';
 import { parseRoster, type RosterRow } from '../../lib/csv';
+import { SAMPLE_ROSTER_CSV, downloadCsv } from '../../lib/samples';
 
 interface ArchivedPerson {
   id: string;
@@ -74,6 +75,12 @@ export default function RosterPage() {
   const [pending, setPending] = useState<ArchivedPerson | null>(null);
   const [handicap, setHandicap] = useState('');
   const [manualPtp, setManualPtp] = useState('');
+
+  // Adjusting somebody already on the roster.
+  const [editing, setEditing] = useState<RosterPlayer | null>(null);
+  const [editPtp, setEditPtp] = useState('');
+  const [editHandicap, setEditHandicap] = useState('');
+  const [editReason, setEditReason] = useState('');
   const [removed, setRemoved] = useState<ArchivedPerson[]>([]);
   const [showRemoved, setShowRemoved] = useState(false);
 
@@ -215,6 +222,75 @@ export default function RosterPage() {
   }
 
   /** Take someone off this year's roster. Refused once they have been scored. */
+  function beginEdit(player: RosterPlayer) {
+    setEditing(player);
+    setEditPtp(String(player.startingPtp));
+    setEditHandicap(player.handicapIndex === null ? '' : String(player.handicapIndex));
+    setEditReason(player.overrideReason ?? '');
+    setMessage('');
+  }
+
+  /**
+   * Change somebody's starting target after the fact.
+   *
+   * A typed number is an override, so it is recorded as one with the reason beside it — the
+   * 2021 to 2022 adjustments in the group's own history are exactly this, and being able to
+   * see later why a number is what it is matters more than the number.
+   */
+  async function saveEdit(player: RosterPlayer) {
+    const ptp = Number(editPtp);
+    if (!Number.isFinite(ptp)) {
+      setMessage('That starting target is not a number.');
+      return;
+    }
+    const index = editHandicap.trim() === '' ? null : Number(editHandicap);
+    if (index !== null && !Number.isFinite(index)) {
+      setMessage('That handicap index is not a number.');
+      return;
+    }
+
+    const response = await fetch(`${apiUrl}/api/events/${eventId}/players`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        personId: player.personId,
+        startingPtp: ptp,
+        source: 'manual',
+        ...(index === null ? {} : { handicapIndex: index }),
+        ...(editReason.trim() === '' ? {} : { overrideReason: editReason.trim() }),
+      }),
+    });
+    if (!response.ok) {
+      setMessage(((await response.json()) as { error?: string }).error ?? 'Could not save that.');
+      return;
+    }
+    setEditing(null);
+    setMessage(`${player.displayName} set to ${ptp}.`);
+    await load(eventId);
+  }
+
+  /** Put a player back on the value the rules compute for them. */
+  async function resetToComputed(player: RosterPlayer) {
+    const response = await fetch(`${apiUrl}/api/events/${eventId}/players`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        personId: player.personId,
+        ...(player.handicapIndex === null ? {} : { handicapIndex: player.handicapIndex }),
+      }),
+    });
+    if (!response.ok) {
+      setMessage('Could not work out a computed value for them.');
+      return;
+    }
+    const body = (await response.json()) as { startingTarget: { explanation: string } };
+    setEditing(null);
+    setMessage(`${player.displayName}: ${body.startingTarget.explanation}`);
+    await load(eventId);
+  }
+
   async function removeFromRoster(player: RosterPlayer) {
     setMessage('');
     const response = await fetch(`${apiUrl}/api/events/${eventId}/players/${player.personId}`, {
@@ -385,17 +461,24 @@ export default function RosterPage() {
         ) : (
           <ul className="list">
             {roster.map((player) => (
-              <li key={player.id}>
+              <li key={player.id} style={{ flexWrap: 'wrap' }}>
                 <span>
                   {player.displayName}
                   <br />
                   <span className="meta">
                     {SOURCE_LABEL[player.startingPtpSource] ?? player.startingPtpSource}
                     {player.computedPtp !== null && player.computedPtp !== player.startingPtp
-                      ? ` · computed ${player.computedPtp}`
+                      ? ` · rules say ${player.computedPtp}`
                       : ''}
+                    {player.handicapIndex !== null ? ` · index ${player.handicapIndex}` : ''}
                     {player.phone !== null ? ` · ${player.phone}` : ''}
                   </span>
+                  {player.overrideReason !== null && (
+                    <>
+                      <br />
+                      <span className="meta">“{player.overrideReason}”</span>
+                    </>
+                  )}
                 </span>
                 <span style={{ flex: '0 0 auto', textAlign: 'right' }}>
                   <b>{player.startingPtp}</b>
@@ -404,12 +487,72 @@ export default function RosterPage() {
                 </span>
                 <button
                   type="button"
+                  onClick={() => (editing?.id === player.id ? setEditing(null) : beginEdit(player))}
+                  aria-label={`Adjust ${player.displayName}`}
+                >
+                  {editing?.id === player.id ? 'Close' : 'Adjust'}
+                </button>
+                <button
+                  type="button"
                   className="danger"
                   onClick={() => void removeFromRoster(player)}
                   aria-label={`Remove ${player.displayName} from the roster`}
                 >
                   Remove
                 </button>
+
+                {editing?.id === player.id && (
+                  <span style={{ flex: '1 1 100%', marginTop: '0.7rem' }}>
+                    <div className="row">
+                      <span style={{ flex: '1 1 auto' }}>
+                        <label htmlFor="edit-ptp" className="meta">
+                          Starting PTP
+                        </label>
+                        <input
+                          id="edit-ptp"
+                          value={editPtp}
+                          inputMode="decimal"
+                          onChange={(event) => setEditPtp(event.target.value)}
+                        />
+                      </span>
+                      <span style={{ flex: '1 1 auto' }}>
+                        <label htmlFor="edit-hcp" className="meta">
+                          Handicap index
+                        </label>
+                        <input
+                          id="edit-hcp"
+                          value={editHandicap}
+                          inputMode="decimal"
+                          placeholder="optional"
+                          onChange={(event) => setEditHandicap(event.target.value)}
+                        />
+                      </span>
+                    </div>
+                    <div className="field">
+                      <label htmlFor="edit-why" className="meta">
+                        Why (kept on the record)
+                      </label>
+                      <input
+                        id="edit-why"
+                        value={editReason}
+                        placeholder="handicap has moved since last year"
+                        onChange={(event) => setEditReason(event.target.value)}
+                      />
+                    </div>
+                    <div className="row">
+                      <button type="button" onClick={() => void saveEdit(player)}>
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        className="link-button"
+                        onClick={() => void resetToComputed(player)}
+                      >
+                        Use what the rules compute
+                      </button>
+                    </div>
+                  </span>
+                )}
               </li>
             ))}
           </ul>
@@ -521,7 +664,22 @@ export default function RosterPage() {
         <h2 className="section">From a spreadsheet</h2>
         <p className="hint" style={{ marginBottom: '0.6rem' }}>
           Paste rows, or choose a CSV. A header row is read if there is one — Name, Email,
-          Phone, Handicap, PTP, in any order. Name is the only column that matters.
+          Phone, Handicap, PTP, in any order. Name is the only column that matters; leave
+          Handicap blank for someone whose target you are typing, and PTP blank for a
+          first-timer.
+        </p>
+        <p className="note" style={{ margin: '0 0 0.75rem' }}>
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => downloadCsv('roster-template.csv', SAMPLE_ROSTER_CSV)}
+          >
+            Download a sample
+          </button>
+          {' · '}
+          <button type="button" className="link-button" onClick={() => setCsv(SAMPLE_ROSTER_CSV)}>
+            Fill this box with it
+          </button>
         </p>
         <input
           type="file"

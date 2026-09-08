@@ -200,6 +200,57 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
     return c.json({ courses: result.value });
   });
 
+  app.get('/api/courses/:id', async (c) => {
+    const courseId = c.req.param('id');
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const course = await client.query<{
+        id: string;
+        name: string;
+        total_holes: number;
+        completeness: string;
+      }>('SELECT id, name, total_holes, completeness FROM courses WHERE id = $1', [courseId]);
+      if (course.rows[0] === undefined) return null;
+
+      const teeSets = await client.query<{
+        id: string;
+        name: string;
+        gender: string;
+        course_rating: string | null;
+        slope_rating: number | null;
+        par_total: number | null;
+        yardage_total: number | null;
+        holes: number;
+      }>(
+        `SELECT t.id, t.name, t.gender, t.course_rating, t.slope_rating,
+                t.par_total, t.yardage_total,
+                (SELECT count(*)::int FROM course_holes h WHERE h.tee_set_id = t.id) AS holes
+           FROM tee_sets t WHERE t.course_id = $1
+          ORDER BY t.yardage_total DESC NULLS LAST, t.name`,
+        [courseId],
+      );
+
+      return {
+        id: course.rows[0].id,
+        name: course.rows[0].name,
+        totalHoles: course.rows[0].total_holes,
+        completeness: course.rows[0].completeness,
+        teeSets: teeSets.rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          gender: row.gender,
+          courseRating: row.course_rating === null ? null : Number(row.course_rating),
+          slopeRating: row.slope_rating,
+          parTotal: row.par_total,
+          yardageTotal: row.yardage_total,
+          holes: row.holes,
+        })),
+      };
+    });
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (result.value === null) return c.json({ error: 'No such course.' }, 404);
+    return c.json(result.value);
+  });
+
   app.post('/api/courses', async (c) => {
     const body = (await c.req.json().catch(() => null)) as unknown;
     const parsed = courseDocumentSchema.safeParse(body);
@@ -639,14 +690,62 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
     return c.json({ id: result.value.id, name }, 201);
   });
 
+  /** Every round of an event, with everything a planner needs to recognise it. */
   app.get('/api/events/:id/rounds', async (c) => {
     const eventId = c.req.param('id');
     const result = await asSignedIn(c.req.raw.headers, async (client) => {
-      const { rows } = await client.query<{ id: string; name: string; sequence: number }>(
-        'SELECT id, name, sequence FROM rounds WHERE event_id = $1 ORDER BY sequence',
+      const { rows } = await client.query<{
+        id: string;
+        key: string;
+        name: string;
+        sequence: number;
+        status: string;
+        played_on: string | null;
+        hole_selection: { mode?: string; holes?: number[] } | null;
+        course_name: string | null;
+        tee_set: string | null;
+        groups: number;
+        locked: number;
+        scored: number;
+      }>(
+        `SELECT r.id, r.key, r.name, r.sequence, r.status, r.hole_selection,
+                -- A round is played on a day, not at an instant. Handing back a timestamp
+                -- lets a timezone shift it to the day before.
+                to_char(r.played_on, 'YYYY-MM-DD') AS played_on,
+                c.name AS course_name, t.name AS tee_set,
+                (SELECT count(*)::int FROM tee_groups g WHERE g.round_id = r.id) AS groups,
+                (SELECT count(*)::int FROM tee_groups g
+                  WHERE g.round_id = r.id AND g.locked_at IS NOT NULL) AS locked,
+                (SELECT count(*)::int FROM scorecards s
+                  WHERE s.round_id = r.id AND s.status <> 'not_started') AS scored
+           FROM rounds r
+           LEFT JOIN courses c ON c.id = r.course_id
+           LEFT JOIN tee_sets t ON t.id = r.tee_set_id
+          WHERE r.event_id = $1
+          ORDER BY r.sequence`,
         [eventId],
       );
-      return rows;
+
+      return rows.map((row) => {
+        const mode = row.hole_selection?.mode ?? 'all';
+        const custom = row.hole_selection?.holes?.length;
+        return {
+          id: row.id,
+          key: row.key,
+          name: row.name,
+          sequence: row.sequence,
+          status: row.status,
+          playedOn: row.played_on,
+          holeSelection: mode,
+          holeCount:
+            custom !== undefined && custom > 0 ? custom : mode === 'all' ? null : 9,
+          courseName: row.course_name,
+          teeSet: row.tee_set,
+          groups: row.groups,
+          locked: row.locked > 0,
+          scored: row.scored,
+        };
+      });
     });
     if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
     return c.json({ rounds: result.value });
@@ -1484,6 +1583,7 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
       key?: unknown;
       name?: unknown;
       holeSelection?: unknown;
+      playedOn?: unknown;
     };
     const eventId = typeof body.eventId === 'string' ? body.eventId : '';
     const courseId = typeof body.courseId === 'string' ? body.courseId : '';
@@ -1539,8 +1639,9 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
           : `round-${sequence}`;
 
       const { rows } = await client.query<{ id: string; key: string }>(
-        `INSERT INTO rounds (event_id, key, name, sequence, course_id, tee_set_id, hole_selection, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,'in_progress')
+        `INSERT INTO rounds (event_id, key, name, sequence, course_id, tee_set_id, hole_selection,
+                             played_on, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'scheduled')
          RETURNING id, key`,
         [
           eventId,
@@ -1550,6 +1651,9 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
           courseId,
           teeSetId,
           JSON.stringify(holeSelection),
+          typeof body.playedOn === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.playedOn)
+            ? body.playedOn
+            : null,
         ],
       );
       return rows[0] ?? null;

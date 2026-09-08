@@ -15,6 +15,7 @@ import { apiUrl, authClient } from '../lib/auth-client';
 const LINKS = [
   { href: '/roster', label: 'Roster' },
   { href: '/courses', label: 'Courses' },
+  { href: '/rounds', label: 'Rounds' },
   { href: '/tee-times', label: 'Tee times' },
   { href: '/standings', label: 'Standings' },
   { href: '/rulesets', label: 'Rules' },
