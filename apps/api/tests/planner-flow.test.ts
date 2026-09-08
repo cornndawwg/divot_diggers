@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import {
   cookiesFrom,
   createAuthHarness,
@@ -38,6 +40,13 @@ function post(path: string, body: unknown, jar: string) {
 }
 
 const NINE = [4, 3, 5, 4, 4, 3, 4, 5, 4];
+
+const RULESET = JSON.parse(
+  readFileSync(
+    fileURLToPath(new URL('../../../divot-diggers-ruleset.json', import.meta.url)),
+    'utf8',
+  ),
+) as unknown;
 
 beforeAll(async () => {
   harness = await createAuthHarness('ddga_planner');
@@ -344,5 +353,74 @@ describe('BUILD-TASKS 2.5: two rounds on the same course', () => {
       'Thursday AM dogfight',
       'Thursday PM Cup',
     ]);
+  });
+});
+
+describe('a brand new group can be used immediately', () => {
+  // The bug this guards: a group started with no rules, so there was no target to seed and
+  // adding the very first person to a roster failed with "no dogfight competition
+  // configured" — on the first thing a new planner tries to do.
+  let freshCookies = '';
+  let freshEventId = '';
+
+  beforeAll(async () => {
+    const email = 'brandnew@example.com';
+    await harness.request('/api/auth/sign-up/email', {
+      method: 'POST',
+      body: JSON.stringify({ email, password: PASSWORD, name: 'Brand New' }),
+    });
+    const link = linkFrom(harness.mailer.lastTo(email)?.text ?? '');
+    await harness.request(link.slice(new URL(link).origin.length), { redirect: 'manual' });
+    freshCookies = cookiesFrom(
+      await harness.request('/api/auth/sign-in/email', {
+        method: 'POST',
+        body: JSON.stringify({ email, password: PASSWORD }),
+      }),
+    );
+    await post('/api/organizations', { name: 'Brand New Society' }, freshCookies);
+  });
+
+  it('starts with a set of rules of its own', async () => {
+    const response = await harness.request('/api/rulesets', { cookies: freshCookies });
+    const body = (await response.json()) as { rulesets: { name: string; version: number }[] };
+    expect(body.rulesets).toHaveLength(1);
+    expect(body.rulesets[0]?.name).toBe('Brand New Society House Rules');
+    expect(body.rulesets[0]?.version).toBe(1);
+  });
+
+  it('seeds a target for the first player added, rather than failing', async () => {
+    const event = await post('/api/events', { name: 'First Trip', year: 2027 }, freshCookies);
+    freshEventId = ((await event.json()) as { id: string }).id;
+
+    const person = await post('/api/people', { name: 'The Owner' }, freshCookies);
+    const personId = ((await person.json()) as { id: string }).id;
+
+    const added = await post(
+      `/api/events/${freshEventId}/players`,
+      { personId, handicapIndex: 12, source: 'seeded_from_handicap' },
+      freshCookies,
+    );
+    expect(added.status).toBe(201);
+    const body = (await added.json()) as { startingTarget: { value: number; explanation: string } };
+    // The starter subtracts from 36, not from 54: it is a neutral default, not another
+    // group's house rules.
+    expect(body.startingTarget.value).toBe(24);
+    expect(body.startingTarget.explanation).toMatch(/36 − 12 = 24/);
+  });
+
+  it('adopts an event that was created before any rules existed', async () => {
+    // Orphan the event, as it would have been before the fix.
+    await harness.privilegedPool.query('UPDATE events SET ruleset_id = NULL WHERE id = $1', [
+      freshEventId,
+    ]);
+    const response = await post('/api/rulesets', RULESET, freshCookies);
+    expect(response.status).toBe(201);
+    expect(((await response.json()) as { attachedToEvents: number }).attachedToEvents).toBe(1);
+
+    const { rows } = await harness.privilegedPool.query<{ ruleset_id: string | null }>(
+      'SELECT ruleset_id FROM events WHERE id = $1',
+      [freshEventId],
+    );
+    expect(rows[0]?.ruleset_id).not.toBeNull();
   });
 });

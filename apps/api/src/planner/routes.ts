@@ -26,6 +26,7 @@ import {
   type StartingTarget,
 } from '@ddga/scoring-engine';
 import { CourseImportRejected, importCourse } from '../courses/import.ts';
+import { starterRuleset } from '../rulesets/starter.ts';
 import { computeStandings, rebuildResults } from '../scoring/standings.ts';
 
 /**
@@ -144,14 +145,26 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (name === '') return c.json({ error: 'A group needs a name.' }, 400);
 
-    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+    const result = await asSignedIn(c.req.raw.headers, async (client, personId) => {
       // A function, not a plain insert: it creates the group and the owner membership
       // together, so there is never a group nobody can reach.
       const { rows } = await client.query<{ create_organization: string }>(
         'SELECT create_organization($1, $2)',
         [name, slugify(name)],
       );
-      return rows[0]?.create_organization ?? null;
+      const orgId = rows[0]?.create_organization ?? null;
+
+      // A group with no rules cannot seed anybody's target, which made adding the first
+      // player to a roster fail. Every new group gets a neutral starter it can edit.
+      if (orgId !== null) {
+        const starter = starterRuleset(name);
+        await client.query(
+          `INSERT INTO rulesets (org_id, key, name, version, document, created_by, published_at)
+           VALUES ($1, $2, $3, 1, $4, $5, now())`,
+          [orgId, starter['rulesetId'], starter['name'], JSON.stringify(starter), personId],
+        );
+      }
+      return orgId;
     });
     if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
     return c.json({ id: result.value, name }, 201);
@@ -284,11 +297,14 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
       // Point the event at the group's newest ruleset so scoring has config to read. The
       // snapshot is taken separately, when the event starts.
       if (id !== null) {
+        // Most recently published wins. Ordering by version alone breaks as soon as a group
+        // has two different rulesets, because both start at version 1 and the choice
+        // between them becomes arbitrary.
         await client.query(
           `UPDATE events SET ruleset_id = (
              SELECT r.id FROM rulesets r
               WHERE r.org_id = $2 AND r.published_at IS NOT NULL
-              ORDER BY r.version DESC LIMIT 1)
+              ORDER BY r.published_at DESC, r.version DESC LIMIT 1)
            WHERE id = $1`,
           [id, orgId],
         );
@@ -432,12 +448,35 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
          VALUES ($1,$2,$3,$4,$5,$6, now()) RETURNING id`,
         [orgId, ruleset.rulesetId, ruleset.name, version, JSON.stringify(body), personId],
       );
-      return { kind: 'created' as const, id: rows[0]?.id ?? null, version };
+
+      // An event created before any rules existed points at nothing and cannot be scored.
+      // Attach these to it rather than leaving it broken. Events that already have a
+      // ruleset keep it, because changing what a running event scores by is not a side
+      // effect anyone should get for free.
+      const attached = await client.query(
+        `UPDATE events SET ruleset_id = $1
+          WHERE org_id = $2 AND ruleset_id IS NULL AND ruleset_snapshot IS NULL`,
+        [rows[0]?.id, orgId],
+      );
+      return {
+        kind: 'created' as const,
+        id: rows[0]?.id ?? null,
+        version,
+        attachedTo: attached.rowCount ?? 0,
+      };
     });
 
     if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
     if (result.value.kind === 'no-org') return c.json({ error: 'Create your group first.' }, 409);
-    return c.json({ id: result.value.id, key: ruleset.rulesetId, version: result.value.version }, 201);
+    return c.json(
+      {
+        id: result.value.id,
+        key: ruleset.rulesetId,
+        version: result.value.version,
+        attachedToEvents: result.value.attachedTo,
+      },
+      201,
+    );
   });
 
   /** Load a tee set's holes and resolve the selection against them. */
@@ -823,7 +862,13 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
 
     if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
     if (result.value.kind === 'no-target') {
-      return c.json({ error: 'This event has no dogfight competition configured.' }, 409);
+      return c.json(
+        {
+          error:
+            'This event has no rules attached yet, so there is no target to seed. Set them up on the Rules page, then create the event again.',
+        },
+        409,
+      );
     }
     if (result.value.kind === 'nothing-to-seed-from') {
       return c.json(
@@ -992,7 +1037,10 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
     });
     if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
     if (result.value === null) {
-      return c.json({ error: 'This event has no cup competition configured.' }, 409);
+      return c.json(
+        { error: 'This event has no cup configured in its rules, so there is nothing to balance.' },
+        409,
+      );
     }
     return c.json(result.value);
   });
@@ -1320,7 +1368,13 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
 
     if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
     if (result.value === null) {
-      return c.json({ error: 'This event has no individual competition configured.' }, 409);
+      return c.json(
+        {
+          error:
+            'This event has no rules attached yet, so nothing can be scored. Set them up on the Rules page, then create the event again.',
+        },
+        409,
+      );
     }
     return c.json(result.value);
   });
