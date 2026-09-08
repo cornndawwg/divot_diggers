@@ -24,7 +24,8 @@
     "db:reset-dev": "bash scripts/reset-dev-db.sh",
     "courses:seed": "node --experimental-strip-types --env-file=.env apps/api/scripts/seed-courses.ts",
     "dev:stop": "bash scripts/stop-dev.sh",
-    "rulesets:seed": "node --experimental-strip-types --env-file=.env apps/api/scripts/seed-ruleset.ts"
+    "rulesets:seed": "node --experimental-strip-types --env-file=.env apps/api/scripts/seed-ruleset.ts",
+    "roster:seed": "node --experimental-strip-types --env-file=.env apps/api/scripts/seed-roster.ts"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",

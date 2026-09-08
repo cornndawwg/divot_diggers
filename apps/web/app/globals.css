@@ -191,3 +191,18 @@ table.scorecard tfoot td { border-top: 1px solid var(--line); padding-top: 0.4re
   .nav ul a { padding: 0.4rem 0.55rem; font-size: 0.85rem; }
   .nav .who { display: none; }
 }
+
+textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 0.85rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  resize: vertical;
+}
+textarea:focus { outline: 2px solid var(--green); outline-offset: -1px; }
+input[type='file'] { font-size: 0.85rem; }

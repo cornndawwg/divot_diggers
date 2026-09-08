@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { apiUrl } from '../../lib/auth-client';
+import { parseRoster, type RosterRow } from '../../lib/csv';
 
 interface ArchivedPerson {
   id: string;
@@ -61,6 +62,13 @@ export default function RosterPage() {
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPhone, setNewPhone] = useState('');
+
+  // Importing a whole roster from a spreadsheet.
+  const [csv, setCsv] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<
+    { name: string; status: string; detail: string }[] | null
+  >(null);
 
   // Seeding the golfer being added to the roster.
   const [pending, setPending] = useState<ArchivedPerson | null>(null);
@@ -144,6 +152,31 @@ export default function RosterPage() {
     setNewEmail('');
     setNewPhone('');
     setMessage(`${newName.trim()} saved. They will be on this list next year too.`);
+    await load(eventId);
+  }
+
+  async function importRoster(rows: RosterRow[]) {
+    setImporting(true);
+    setMessage('');
+    setImportResult(null);
+    const response = await fetch(`${apiUrl}/api/events/${eventId}/roster/import`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rows }),
+    });
+    setImporting(false);
+    if (!response.ok) {
+      setMessage(((await response.json()) as { error?: string }).error ?? 'Could not import.');
+      return;
+    }
+    const body = (await response.json()) as {
+      rows: { name: string; status: string; detail: string }[];
+      added: number;
+    };
+    setImportResult(body.rows);
+    setMessage(`${body.added} of ${body.rows.length} added.`);
+    setCsv('');
     await load(eventId);
   }
 
@@ -483,6 +516,100 @@ export default function RosterPage() {
           )}
         </div>
       )}
+
+      <div className="card" style={{ marginTop: '1rem' }}>
+        <h2 className="section">From a spreadsheet</h2>
+        <p className="hint" style={{ marginBottom: '0.6rem' }}>
+          Paste rows, or choose a CSV. A header row is read if there is one — Name, Email,
+          Phone, Handicap, PTP, in any order. Name is the only column that matters.
+        </p>
+        <input
+          type="file"
+          accept=".csv,.txt,text/csv,text/plain"
+          aria-label="Choose a CSV file"
+          onChange={async (event) => {
+            const file = event.target.files?.[0];
+            if (file !== undefined) setCsv(await file.text());
+          }}
+          style={{ marginBottom: '0.6rem' }}
+        />
+        <textarea
+          value={csv}
+          onChange={(event) => setCsv(event.target.value)}
+          rows={5}
+          aria-label="Paste roster rows"
+          placeholder={'Name,Email,Phone,Handicap,PTP\nKenny Adkins,kenny@example.com,555-0142,,14'}
+        />
+        {csv.trim() !== '' && (() => {
+          const parsed = parseRoster(csv);
+          return (
+            <>
+              {parsed.problems.map((problem) => (
+                <p className="check" key={problem} style={{ color: '#8a6d00' }}>
+                  {problem}
+                </p>
+              ))}
+              {parsed.rows.length > 0 && (
+                <>
+                  <p className="hint">
+                    {parsed.rows.length} {parsed.rows.length === 1 ? 'row' : 'rows'} read.
+                    Columns used: {Object.entries(parsed.columns).map(([f, c]) => `${f} from "${c}"`).join(', ')}
+                  </p>
+                  <table className="points">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Hcp</th>
+                        <th>PTP</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parsed.rows.slice(0, 6).map((row, index) => (
+                        <tr key={index}>
+                          <td>{row.name}</td>
+                          <td className="rel">{row.email ?? '—'}</td>
+                          <td className="rel">{row.phone ?? '—'}</td>
+                          <td className="rel">{row.handicapIndex ?? '—'}</td>
+                          <td className="rel">{row.startingPtp ?? '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {parsed.rows.length > 6 && (
+                    <p className="hint">and {parsed.rows.length - 6} more.</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void importRoster(parsed.rows)}
+                    disabled={importing}
+                    style={{ marginTop: '0.6rem' }}
+                  >
+                    {importing ? 'Importing…' : `Import ${parsed.rows.length}`}
+                  </button>
+                </>
+              )}
+            </>
+          );
+        })()}
+        {importResult !== null && (
+          <ul className="list" style={{ marginTop: '0.75rem' }}>
+            {importResult.map((row, index) => (
+              <li key={index}>
+                <span>
+                  {row.name}
+                  <br />
+                  <span className="meta">{row.detail}</span>
+                </span>
+                <span className="meta" style={{ flex: '0 0 auto' }}>
+                  {row.status}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       <div className="card" style={{ marginTop: '1rem' }}>
         <h2 style={{ fontSize: '1rem', margin: '0 0 0.5rem' }}>Someone new</h2>

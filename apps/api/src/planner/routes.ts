@@ -27,6 +27,11 @@ import {
 } from '@ddga/scoring-engine';
 import { CourseImportRejected, importCourse } from '../courses/import.ts';
 import { starterRuleset } from '../rulesets/starter.ts';
+import {
+  importRosterRows,
+  type RosterImportOutcome,
+  type RosterImportRow,
+} from '../roster/import.ts';
 import { computeStandings, rebuildResults } from '../scoring/standings.ts';
 
 /**
@@ -1043,6 +1048,98 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
       );
     }
     return c.json(result.value);
+  });
+
+  /**
+   * Choose which rules an event scores by.
+   *
+   * Only while it is still a draft. Once an event starts it reads a frozen snapshot and
+   * never the live ruleset (invariant #6) — otherwise editing a point value in 2029 would
+   * silently rewrite 2027's results.
+   */
+  app.post('/api/events/:id/ruleset', async (c) => {
+    const eventId = c.req.param('id');
+    const body = (await c.req.json().catch(() => ({}))) as { rulesetId?: unknown };
+    const rulesetId = typeof body.rulesetId === 'string' ? body.rulesetId : '';
+    if (rulesetId === '') return c.json({ error: 'Choose a set of rules.' }, 400);
+
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const event = await client.query<{ status: string }>(
+        'SELECT status FROM events WHERE id = $1',
+        [eventId],
+      );
+      const status = event.rows[0]?.status;
+      if (status === undefined) return { kind: 'no-event' as const };
+      if (status !== 'draft') return { kind: 'started' as const };
+
+      const updated = await client.query(
+        `UPDATE events SET ruleset_id = $1 WHERE id = $2 AND ruleset_snapshot IS NULL`,
+        [rulesetId, eventId],
+      );
+      return { kind: 'set' as const, changed: updated.rowCount ?? 0 };
+    });
+
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (result.value.kind === 'no-event') return c.json({ error: 'No such event.' }, 404);
+    if (result.value.kind === 'started') {
+      return c.json(
+        {
+          error:
+            'This event has already started, so its rules are frozen. That is deliberate — changing them now would rewrite results that have already been scored.',
+        },
+        409,
+      );
+    }
+    return c.json({ changed: result.value.changed });
+  });
+
+  /**
+   * Add many golfers at once, from a spreadsheet.
+   *
+   * Twenty-four names, emails and phone numbers is half an hour of typing, and the planner
+   * usually has them in a list already. Everything goes through the same archive and seeding
+   * paths a single add uses, in one transaction, so a bad row cannot leave half a roster.
+   */
+  app.post('/api/events/:id/roster/import', async (c) => {
+    const eventId = c.req.param('id');
+    const body = (await c.req.json().catch(() => ({}))) as { rows?: unknown };
+    const rows = Array.isArray(body.rows) ? body.rows : null;
+    if (rows === null) return c.json({ error: 'Send a list of rows.' }, 400);
+    if (rows.length > 500) return c.json({ error: 'That is more than 500 rows.' }, 400);
+
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const target = await targetConfigFor(client, eventId);
+      if (target === null) return { kind: 'no-rules' as const };
+
+      const event = await client.query<{ org_id: string }>(
+        'SELECT org_id FROM events WHERE id = $1',
+        [eventId],
+      );
+      const orgId = event.rows[0]?.org_id;
+      if (orgId === undefined) return { kind: 'no-event' as const };
+
+      let outcome: RosterImportOutcome[] = [];
+      await client.query('BEGIN');
+      try {
+        outcome = await importRosterRows(client, orgId, eventId, target, rows as RosterImportRow[]);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      }
+
+      return { kind: 'done' as const, outcome };
+    });
+
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (result.value.kind === 'no-event') return c.json({ error: 'No such event.' }, 404);
+    if (result.value.kind === 'no-rules') {
+      return c.json({ error: 'This event has no rules attached yet.' }, 409);
+    }
+    return c.json({
+      rows: result.value.outcome,
+      added: result.value.outcome.filter((row) => row.status === 'added').length,
+    });
   });
 
   // --- tee times and groupings ----------------------------------------------

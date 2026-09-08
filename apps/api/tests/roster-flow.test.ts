@@ -413,3 +413,71 @@ describe('removing someone from the archive', () => {
     expect(response.status).toBe(409);
   });
 });
+
+describe('importing a roster from a spreadsheet', () => {
+  let importEventId = '';
+
+  beforeAll(async () => {
+    const created = await post('/api/events', { name: 'Import Test', year: 2029 });
+    importEventId = ((await created.json()) as { id: string }).id;
+  });
+
+  function rows() {
+    return [
+      { name: 'Kenny Adkins', phone: '555-0142', startingPtp: 14 },
+      { name: 'Brand New Golfer', email: 'brand@example.com', handicapIndex: 20 },
+      { name: 'No Numbers At All' },
+      { name: '   ' },
+    ];
+  }
+
+  it('adds them, and says what happened to each', async () => {
+    const response = await post(`/api/events/${importEventId}/roster/import`, { rows: rows() });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      added: number;
+      rows: { name: string; status: string; detail: string }[];
+    };
+    expect(body.added).toBe(2);
+    expect(body.rows.map((row) => row.status)).toEqual(['added', 'added', 'no target', 'skipped']);
+    expect(body.rows[1]?.detail).toMatch(/54 − 20 = 34/);
+    expect(body.rows[2]?.detail).toMatch(/needs a handicap or a starting target/);
+  });
+
+  it('matches a golfer already in the archive rather than making a second one', async () => {
+    // Kenny was already in the archive from an earlier test, with an email. The import row
+    // has no email, which used to mean a duplicate of everybody on every import.
+    const { people } = await archive();
+    expect(people.filter((person) => person.displayName === 'Kenny Adkins')).toHaveLength(1);
+  });
+
+  it('fills in a detail that was missing without overwriting one that was not', async () => {
+    const { people } = await archive();
+    const kenny = people.find((person) => person.displayName === 'Kenny Adkins');
+    // The email he already had survives; the phone from the import is added.
+    expect(kenny?.email).toBe('kenny@example.com');
+    expect(kenny?.phone).toBe('555-0142');
+  });
+
+  it('is safe to run twice', async () => {
+    const before = (await archive()).people.length;
+    await post(`/api/events/${importEventId}/roster/import`, { rows: rows() });
+    const after = (await archive()).people.length;
+    expect(after).toBe(before);
+
+    const roster = await harness.request(`/api/events/${importEventId}/players`, { cookies });
+    expect(((await roster.json()) as { players: unknown[] }).players).toHaveLength(2);
+  });
+
+  it('refuses an absurd number of rows', async () => {
+    const many = Array.from({ length: 501 }, (_, index) => ({ name: `Player ${index}` }));
+    const response = await post(`/api/events/${importEventId}/roster/import`, { rows: many });
+    expect(response.status).toBe(400);
+  });
+
+  it('leaves nothing behind when a row fails', async () => {
+    const before = (await archive()).people.length;
+    await post(`/api/events/${importEventId}/roster/import`, { rows: 'not a list' });
+    expect((await archive()).people).toHaveLength(before);
+  });
+});
