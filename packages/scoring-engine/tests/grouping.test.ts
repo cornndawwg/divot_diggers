@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  matchesToTeeGroups,
+  pairSides,
+  ScoringInputError,
   splitIntoSides,
   suggestGroups,
   suggestTeeTimes,
@@ -189,5 +192,147 @@ describe('splitting a field into two sides', () => {
     const split = splitIntoSides(same);
     expect(split.gap).toBe(0);
     expect(split.totalA).toBe(120);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Match play pairings
+// ---------------------------------------------------------------------------
+
+describe('pairSides', () => {
+  // Two sides of six, so a pairs session is three matches and singles is six.
+  const sideA = [48, 41, 38, 33, 29, 15].map((target, index) => ({
+    player: { name: `a${index}` },
+    target,
+  }));
+  const sideB = [46, 40, 37, 30, 16, 14].map((target, index) => ({
+    player: { name: `b${index}` },
+    target,
+  }));
+
+  it('puts two of one side against two of the other, never a mixed group', () => {
+    const { matches } = pairSides(sideA, sideB, { playersPerSide: 2 });
+
+    expect(matches).toHaveLength(3);
+    for (const match of matches) {
+      expect(match.a).toHaveLength(2);
+      expect(match.b).toHaveLength(2);
+      // Every name on the A side starts with 'a'. A group that mixed the teams would not be
+      // a match at all, which is the whole difference from an individual round.
+      expect(match.a.every((player) => player.name.startsWith('a'))).toBe(true);
+      expect(match.b.every((player) => player.name.startsWith('b'))).toBe(true);
+    }
+  });
+
+  it('by rank, sends the strongest pair out against the strongest pair', () => {
+    const { matches } = pairSides(sideA, sideB, { playersPerSide: 2, strategy: 'by_rank' });
+
+    expect(matches[0]?.a.map((p) => p.name)).toEqual(['a0', 'a1']); // 48 and 41
+    expect(matches[0]?.b.map((p) => p.name)).toEqual(['b0', 'b1']); // 46 and 40
+    expect(matches[2]?.a.map((p) => p.name)).toEqual(['a4', 'a5']); // 29 and 15
+  });
+
+  it('makes one match per player for singles', () => {
+    const { matches, sittingOut } = pairSides(sideA, sideB, { playersPerSide: 1 });
+
+    expect(matches).toHaveLength(6);
+    expect(sittingOut.a).toEqual([]);
+    expect(sittingOut.b).toEqual([]);
+  });
+
+  it('sits out the surplus rather than lending them to the other team', () => {
+    // Seven against six. Somebody has to sit, and it must not be by joining side B.
+    const seven = [...sideA, { player: { name: 'a6' }, target: 12 }];
+    const { matches, sittingOut } = pairSides(seven, sideB, { playersPerSide: 1 });
+
+    expect(matches).toHaveLength(6);
+    expect(sittingOut.a.map((p) => p.name)).toEqual(['a6']); // the weakest, sat by rank
+    expect(sittingOut.b).toEqual([]);
+  });
+
+  it('sits out a whole match short of a full pair', () => {
+    // Five a side is two pairs matches with one player each side left over, not two and a half.
+    const { matches, sittingOut } = pairSides(sideA.slice(0, 5), sideB.slice(0, 5), {
+      playersPerSide: 2,
+    });
+
+    expect(matches).toHaveLength(2);
+    expect(sittingOut.a).toHaveLength(1);
+    expect(sittingOut.b).toHaveLength(1);
+  });
+
+  it('draws at random when asked, and the draw is reproducible', () => {
+    const fixedRoll = (): number => 0.42;
+    const first = pairSides(sideA, sideB, {
+      playersPerSide: 2,
+      strategy: 'random',
+      random: fixedRoll,
+    });
+    const second = pairSides(sideA, sideB, {
+      playersPerSide: 2,
+      strategy: 'random',
+      random: fixedRoll,
+    });
+
+    expect(first.matches).toEqual(second.matches);
+    // Still team-legal: a random draw changes who plays whom, never which side they are on.
+    for (const match of first.matches) {
+      expect(match.a.every((player) => player.name.startsWith('a'))).toBe(true);
+      expect(match.b.every((player) => player.name.startsWith('b'))).toBe(true);
+    }
+  });
+
+  it('refuses a side size that is not a whole number of players', () => {
+    expect(() => pairSides(sideA, sideB, { playersPerSide: 0 })).toThrow(ScoringInputError);
+    expect(() => pairSides(sideA, sideB, { playersPerSide: 1.5 })).toThrow(ScoringInputError);
+  });
+});
+
+describe('matchesToTeeGroups', () => {
+  const sideA = [48, 41, 38, 33, 29, 15].map((t, i) => ({ player: { name: `a${i}` }, target: t }));
+  const sideB = [46, 40, 37, 30, 16, 14].map((t, i) => ({ player: { name: `b${i}` }, target: t }));
+
+  it('sends a pairs match off as its own foursome', () => {
+    const { matches } = pairSides(sideA, sideB, { playersPerSide: 2 });
+    const groups = matchesToTeeGroups(matches, 2);
+
+    expect(groups).toHaveLength(3);
+    expect(groups[0]?.players.map((p) => p.name)).toEqual(['a0', 'a1', 'b0', 'b1']);
+    expect(groups.every((group) => group.players.length === 4)).toBe(true);
+  });
+
+  it('puts two singles matches in one group, so singles day is not twelve tee times', () => {
+    const { matches } = pairSides(sideA, sideB, { playersPerSide: 1 });
+    const groups = matchesToTeeGroups(matches, 1);
+
+    expect(groups).toHaveLength(3);
+    expect(groups[0]?.players.map((p) => p.name)).toEqual(['a0', 'b0', 'a1', 'b1']);
+  });
+
+  it('numbers the groups from one, in order', () => {
+    const { matches } = pairSides(sideA, sideB, { playersPerSide: 2 });
+    expect(matchesToTeeGroups(matches, 2).map((g) => g.sequence)).toEqual([1, 2, 3]);
+  });
+});
+
+describe('a random draw for an individual round', () => {
+  const field = Array.from({ length: 12 }, (_, index) => ({
+    player: { name: `p${index}` },
+    target: 40 - index,
+  }));
+
+  it('seats everybody exactly once', () => {
+    const groups = suggestGroups(field, { strategy: 'random', groupSize: 4, random: () => 0.7 });
+    const seated = groups.flatMap((group) => group.players.map((player) => player.name));
+
+    expect(groups).toHaveLength(3);
+    expect(new Set(seated).size).toBe(12);
+  });
+
+  it('is a draw, not the rank order dressed up', () => {
+    const groups = suggestGroups(field, { strategy: 'random', groupSize: 4, random: () => 0.3 });
+    const seated = groups.flatMap((group) => group.players.map((player) => player.name));
+
+    expect(seated).not.toEqual(field.map((entry) => entry.player.name));
   });
 });

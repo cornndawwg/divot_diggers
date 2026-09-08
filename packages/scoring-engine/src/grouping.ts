@@ -7,9 +7,11 @@ import { ScoringInputError } from './errors.ts';
  *               across groups, which is the usual way of doing this by hand.
  * `similar`   — players of like ability together, so each group plays at its own pace.
  * `snake`     — strict serpentine by rank, the draft ordering.
+ * `random`    — a straight draw. An individual competition does not care who you play with,
+ *               and some groups would rather it were luck than arithmetic.
  * `manual`    — the planner arranges them; nothing is suggested.
  */
-export type GroupingStrategy = 'balanced' | 'similar' | 'snake' | 'manual';
+export type GroupingStrategy = 'balanced' | 'similar' | 'snake' | 'random' | 'manual';
 
 export interface GroupablePlayer<TPlayer> {
   readonly player: TPlayer;
@@ -26,6 +28,8 @@ export interface GroupingOptions {
   readonly strategy: GroupingStrategy;
   /** Players per group. Four is usual; a short roster leaves the last group smaller. */
   readonly groupSize: number;
+  /** Injectable for `random`, so a draw can be reproduced in a test. */
+  readonly random?: () => number;
 }
 
 /**
@@ -53,6 +57,25 @@ export function suggestGroups<TPlayer>(
   if (strategy === 'manual') {
     // Fill in the order given, changing nothing.
     entries.forEach((entry, index) => {
+      groups[Math.floor(index / groupSize)]?.push(entry.player);
+    });
+    return groups.map((players, index) => ({ sequence: index + 1, players }));
+  }
+
+  if (strategy === 'random') {
+    // A straight draw: shuffle, then deal in order.
+    const draw = [...entries];
+    const roll = options.random ?? Math.random;
+    for (let i = draw.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(roll() * (i + 1));
+      const a = draw[i];
+      const b = draw[j];
+      if (a !== undefined && b !== undefined) {
+        draw[i] = b;
+        draw[j] = a;
+      }
+    }
+    draw.forEach((entry, index) => {
       groups[Math.floor(index / groupSize)]?.push(entry.player);
     });
     return groups.map((players, index) => ({ sequence: index + 1, players }));
@@ -194,4 +217,120 @@ export function splitIntoSides<TPlayer>(
     totalB: totals[1] ?? 0,
     gap: Math.abs((totals[0] ?? 0) - (totals[1] ?? 0)),
   };
+}
+
+
+// ---------------------------------------------------------------------------
+// Match play pairings
+// ---------------------------------------------------------------------------
+
+export type PairingStrategy = 'by_rank' | 'random';
+
+export interface Match<TPlayer> {
+  readonly sequence: number;
+  readonly a: readonly TPlayer[];
+  readonly b: readonly TPlayer[];
+}
+
+export interface PairingOptions {
+  /** One a side for singles, two for a pairs format. From the ruleset's session. */
+  readonly playersPerSide: number;
+  /**
+   * `by_rank` puts the strongest of one side against the strongest of the other, which keeps
+   * every match competitive. `random` draws them out of a hat.
+   */
+  readonly strategy?: PairingStrategy;
+  readonly random?: () => number;
+}
+
+function shuffled<T>(items: readonly T[], roll: () => number): T[] {
+  const draw = [...items];
+  for (let i = draw.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(roll() * (i + 1));
+    const a = draw[i];
+    const b = draw[j];
+    if (a !== undefined && b !== undefined) {
+      draw[i] = b;
+      draw[j] = a;
+    }
+  }
+  return draw;
+}
+
+/**
+ * Pair two sides into matches.
+ *
+ * A team competition is not a grouping problem. Who plays with whom is the competition: a
+ * pairs session is two of one side against two of the other, and a group that mixes the
+ * teams arbitrarily is not a match at all. So this draws from the two sides rather than from
+ * one pool, and anybody left over when the sides are uneven sits out rather than being
+ * quietly attached to the wrong team.
+ */
+export function pairSides<TPlayer>(
+  sideA: readonly GroupablePlayer<TPlayer>[],
+  sideB: readonly GroupablePlayer<TPlayer>[],
+  options: PairingOptions,
+): { matches: Match<TPlayer>[]; sittingOut: { a: TPlayer[]; b: TPlayer[] } } {
+  const { playersPerSide, strategy = 'by_rank' } = options;
+  if (!Number.isInteger(playersPerSide) || playersPerSide < 1) {
+    throw new ScoringInputError(
+      `A side needs at least one player per match, received ${String(playersPerSide)}.`,
+    );
+  }
+
+  const order = (side: readonly GroupablePlayer<TPlayer>[]): GroupablePlayer<TPlayer>[] =>
+    strategy === 'random'
+      ? shuffled(side, options.random ?? Math.random)
+      : [...side]
+          .map((entry, index) => ({ entry, index }))
+          .sort((x, y) => y.entry.target - x.entry.target || x.index - y.index)
+          .map((row) => row.entry);
+
+  const rankedA = order(sideA);
+  const rankedB = order(sideB);
+  const matchCount = Math.floor(Math.min(rankedA.length, rankedB.length) / playersPerSide);
+
+  const matches: Match<TPlayer>[] = [];
+  for (let index = 0; index < matchCount; index += 1) {
+    const from = index * playersPerSide;
+    matches.push({
+      sequence: index + 1,
+      a: rankedA.slice(from, from + playersPerSide).map((entry) => entry.player),
+      b: rankedB.slice(from, from + playersPerSide).map((entry) => entry.player),
+    });
+  }
+
+  const used = matchCount * playersPerSide;
+  return {
+    matches,
+    sittingOut: {
+      a: rankedA.slice(used).map((entry) => entry.player),
+      b: rankedB.slice(used).map((entry) => entry.player),
+    },
+  };
+}
+
+/**
+ * Bundle matches into tee groups.
+ *
+ * A pairs match is already a foursome and goes off as one. Singles are twosomes, and sending
+ * twelve of them off ten minutes apart is two hours of tee times, so two matches share a
+ * group — four players, two separate matches inside it, which is how singles day actually
+ * runs.
+ */
+export function matchesToTeeGroups<TPlayer>(
+  matches: readonly Match<TPlayer>[],
+  playersPerSide: number,
+): SuggestedGroup<TPlayer>[] {
+  const perGroup = Math.max(1, Math.floor(4 / (playersPerSide * 2)));
+  const groups: SuggestedGroup<TPlayer>[] = [];
+
+  for (let index = 0; index < matches.length; index += perGroup) {
+    const bundle = matches.slice(index, index + perGroup);
+    groups.push({
+      sequence: groups.length + 1,
+      players: bundle.flatMap((match) => [...match.a, ...match.b]),
+    });
+  }
+  return groups;
 }

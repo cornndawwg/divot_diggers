@@ -14,6 +14,20 @@ interface GroupPlayer {
   personId: string;
   displayName: string;
   startingPtp: number;
+  /** Which cup side they play for, on a match play round. Null on a dogfight round. */
+  teamKey?: string | null;
+}
+
+interface GroupingMode {
+  kind: 'individual' | 'match_play';
+  formatName: string | null;
+  playersPerSide: number | null;
+}
+
+interface TeamRef {
+  key: string;
+  name: string;
+  colour: string | null;
 }
 
 interface Group {
@@ -24,11 +38,29 @@ interface Group {
   players: GroupPlayer[];
 }
 
+/**
+ * An individual round does not care who plays with whom — every arrangement is fair — so the
+ * choice here is about pace and company, and a straight draw is a perfectly good answer.
+ */
 const STRATEGIES = [
   { key: 'balanced', label: 'Balanced', hint: 'A mix of strong and weak in every group.' },
   { key: 'similar', label: 'Similar', hint: 'Like with like, so each group plays at its own pace.' },
   { key: 'snake', label: 'Snake', hint: 'Strict serpentine by target, the draft ordering.' },
+  { key: 'random', label: 'Random', hint: 'A straight draw out of the hat.' },
 ] as const;
+
+/** A team round is a pairing, not a grouping: the only question is who plays whom. */
+const PAIRINGS = [
+  {
+    key: 'balanced',
+    label: 'Strength v strength',
+    hint: 'The top pair of one side against the top pair of the other, on down.',
+  },
+  { key: 'random', label: 'Random draw', hint: 'Who plays whom is drawn out of the hat.' },
+] as const;
+
+/** Two sides, told apart at a glance. Overridden by whatever colour the team was given. */
+const SIDE_COLOURS = ['#1d4ed8', '#b91c1c'];
 
 export default function TeeTimesPage() {
   const [events, setEvents] = useState<{ id: string; name: string; year: number }[]>([]);
@@ -37,6 +69,13 @@ export default function TeeTimesPage() {
   const [roundId, setRoundId] = useState('');
   const [groups, setGroups] = useState<Group[]>([]);
   const [unassigned, setUnassigned] = useState<GroupPlayer[]>([]);
+  const [mode, setMode] = useState<GroupingMode>({
+    kind: 'individual',
+    formatName: null,
+    playersPerSide: null,
+  });
+  const [teams, setTeams] = useState<TeamRef[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'signed-out' | 'none'>('loading');
 
   const [strategy, setStrategy] = useState<string>('balanced');
@@ -52,9 +91,18 @@ export default function TeeTimesPage() {
       credentials: 'include',
     });
     if (!response.ok) return;
-    const body = (await response.json()) as { groups: Group[]; unassigned: GroupPlayer[] };
+    const body = (await response.json()) as {
+      groups: Group[];
+      unassigned: GroupPlayer[];
+      mode?: GroupingMode;
+      teams?: TeamRef[];
+      warnings?: string[];
+    };
     setGroups(body.groups);
     setUnassigned(body.unassigned);
+    setMode(body.mode ?? { kind: 'individual', formatName: null, playersPerSide: null });
+    setTeams(body.teams ?? []);
+    setWarnings(body.warnings ?? []);
   }, []);
 
   const load = useCallback(
@@ -121,15 +169,24 @@ export default function TeeTimesPage() {
       setMessage('These groupings are locked. Unlock them first.');
       return;
     }
+    const body = (await response.json()) as {
+      groups?: number;
+      error?: string;
+      sittingOut?: string[];
+    };
     if (!response.ok) {
-      setMessage('Could not lay out the sheet.');
+      setMessage(body.error ?? 'Could not lay out the sheet.');
       return;
     }
-    const made = ((await response.json()) as { groups: number }).groups;
+    const made = body.groups ?? 0;
+    const benched = body.sittingOut?.length ?? 0;
     setMessage(
       made === 0
         ? 'Nobody on this roster to group. Add players on the Roster page.'
-        : `${made} ${made === 1 ? 'group' : 'groups'} suggested. Nothing is fixed until you lock it.`,
+        : `${made} ${made === 1 ? 'group' : 'groups'} suggested` +
+            (benched > 0
+              ? `, with ${benched} sitting out this session.`
+              : '. Nothing is fixed until you lock it.'),
     );
     await loadSheet(roundId);
   }
@@ -142,6 +199,29 @@ export default function TeeTimesPage() {
       body: JSON.stringify({ locked }),
     });
     setMessage(locked ? 'Locked.' : 'Unlocked — you can rearrange again.');
+    await loadSheet(roundId);
+  }
+
+  /** Save an arrangement exactly as given. Nothing here second-guesses it. */
+  async function saveArrangement(arrangement: GroupPlayer[][]) {
+    setBusy(true);
+    const response = await fetch(`${apiUrl}/api/rounds/${roundId}/groups`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        firstTeeTime: groups[0]?.teeTime ?? firstTime,
+        intervalMinutes: Number(interval) || 10,
+        groups: arrangement.map((players) => ({
+          personIds: players.map((player) => player.personId),
+        })),
+      }),
+    });
+    setBusy(false);
+    if (response.status === 409) {
+      setMessage('These groupings are locked. Unlock them first.');
+      return;
+    }
     await loadSheet(roundId);
   }
 
@@ -158,20 +238,25 @@ export default function TeeTimesPage() {
         unassigned.find((p) => p.personId === personId);
       if (target !== undefined && player !== undefined) target.players.push(player);
     }
+    await saveArrangement(without.map((group) => group.players));
+  }
 
-    await fetch(`${apiUrl}/api/rounds/${roundId}/groups`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        firstTeeTime: without[0]?.teeTime ?? firstTime,
-        intervalMinutes: Number(interval) || 10,
-        groups: without.map((group) => ({
-          personIds: group.players.map((player) => player.personId),
-        })),
-      }),
-    });
-    await loadSheet(roundId);
+  /**
+   * Start from nothing: empty groups, everybody on the bench.
+   *
+   * Some years the pairings are argued out at the bar and simply typed in. There is no reason
+   * to make somebody suggest a sheet they intend to discard before they can do that.
+   */
+  async function blankSheet(count: number) {
+    setMessage(
+      `${count} empty ${count === 1 ? 'group' : 'groups'}. Put people in them from the list below.`,
+    );
+    await saveArrangement(Array.from({ length: count }, () => []));
+  }
+
+  /** One more group on the end, for the year somebody turns up unannounced. */
+  async function addGroup() {
+    await saveArrangement([...groups.map((group) => group.players), []]);
   }
 
   if (state === 'loading') return <div className="card">Loading…</div>;
@@ -201,6 +286,36 @@ export default function TeeTimesPage() {
   }
 
   const locked = groups.length > 0 && groups.every((group) => group.locked);
+  const matchPlay = mode.kind === 'match_play';
+  const choices = matchPlay ? PAIRINGS : STRATEGIES;
+  const chosen = choices.find((option) => option.key === strategy) ?? choices[0];
+
+  const colourFor = (teamKey: string | null | undefined): string | null => {
+    if (teamKey === null || teamKey === undefined) return null;
+    const index = teams.findIndex((team) => team.key === teamKey);
+    if (index < 0) return null;
+    return teams[index]?.colour ?? SIDE_COLOURS[index % SIDE_COLOURS.length] ?? null;
+  };
+
+  const sideBadge = (player: GroupPlayer) => {
+    const colour = colourFor(player.teamKey);
+    if (colour === null) return null;
+    const team = teams.find((entry) => entry.key === player.teamKey);
+    return (
+      <span
+        title={team?.name ?? player.teamKey ?? ''}
+        style={{
+          display: 'inline-block',
+          width: '0.55rem',
+          height: '0.55rem',
+          borderRadius: '50%',
+          background: colour,
+          marginRight: '0.45rem',
+          verticalAlign: 'middle',
+        }}
+      />
+    );
+  };
 
   return (
     <>
@@ -265,8 +380,38 @@ export default function TeeTimesPage() {
         <>
           <div className="card">
             <h2 className="section">Lay out the sheet</h2>
+            {matchPlay ? (
+              <p className="hint" style={{ marginTop: 0 }}>
+                A <b>{mode.formatName?.replace(/_/g, ' ')}</b> session, so this is a pairing
+                rather than a grouping: {mode.playersPerSide} a side against{' '}
+                {mode.playersPerSide} of the other team.{' '}
+                {teams.length === 2 ? (
+                  <>
+                    {teams.map((team, index) => (
+                      <span key={team.key}>
+                        {index > 0 && ' v '}
+                        <span style={{ color: colourFor(team.key) ?? 'inherit' }}>
+                          ●
+                        </span>{' '}
+                        {team.name}
+                      </span>
+                    ))}
+                    . Sides come from the <Link href="/cup">Cup</Link> page.
+                  </>
+                ) : (
+                  <>
+                    Set the two sides up on the <Link href="/cup">Cup</Link> page first.
+                  </>
+                )}
+              </p>
+            ) : (
+              <p className="hint" style={{ marginTop: 0 }}>
+                An individual round, so who plays with whom does not affect anybody&apos;s
+                score. Group them however suits the day.
+              </p>
+            )}
             <div className="seg">
-              {STRATEGIES.map((option) => (
+              {choices.map((option) => (
                 <button
                   key={option.key}
                   type="button"
@@ -277,16 +422,16 @@ export default function TeeTimesPage() {
                 </button>
               ))}
             </div>
-            <p className="hint">
-              {STRATEGIES.find((option) => option.key === strategy)?.hint}
-            </p>
+            <p className="hint">{chosen?.hint}</p>
             <div className="row" style={{ marginTop: '0.75rem' }}>
-              <span style={{ flex: '1 1 auto' }}>
-                <label htmlFor="size" className="meta">
-                  Players a group
-                </label>
-                <input id="size" value={groupSize} onChange={(e) => setGroupSize(e.target.value)} inputMode="numeric" />
-              </span>
+              {!matchPlay && (
+                <span style={{ flex: '1 1 auto' }}>
+                  <label htmlFor="size" className="meta">
+                    Players a group
+                  </label>
+                  <input id="size" value={groupSize} onChange={(e) => setGroupSize(e.target.value)} inputMode="numeric" />
+                </span>
+              )}
               <span style={{ flex: '1 1 auto' }}>
                 <label htmlFor="first" className="meta">
                   First tee time
@@ -300,29 +445,69 @@ export default function TeeTimesPage() {
                 <input id="gap" value={interval} onChange={(e) => setIntervalMinutes(e.target.value)} inputMode="numeric" />
               </span>
             </div>
-            <button type="button" onClick={() => void suggest()} disabled={busy || locked} style={{ marginTop: '0.75rem' }}>
-              {busy ? 'Working…' : 'Suggest groupings'}
-            </button>
+            <div className="row" style={{ marginTop: '0.75rem' }}>
+              <button type="button" onClick={() => void suggest()} disabled={busy || locked}>
+                {busy ? 'Working…' : matchPlay ? 'Suggest pairings' : 'Suggest groupings'}
+              </button>
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => void blankSheet(Math.max(1, Math.ceil((rosterSize ?? 4) / 4)))}
+                disabled={busy || locked}
+              >
+                Start blank and do it by hand
+              </button>
+            </div>
             <p className="hint">
-              A suggestion, not a decision. Move anyone you like, then lock it.
+              A suggestion, not a decision. Anyone can be moved afterwards, and a captain can
+              rearrange {matchPlay ? 'their own matches' : 'the sheet'} the same way. Locking is
+              what makes it final.
             </p>
           </div>
+
+          {warnings.length > 0 && (
+            <div className="card" style={{ marginTop: '1rem' }}>
+              <h2 className="section">Worth a look</h2>
+              {warnings.map((warning) => (
+                <p key={warning} className="check fail">
+                  {warning}
+                </p>
+              ))}
+              <p className="hint">
+                Not errors. A sheet can be saved and locked exactly as it stands — this is only
+                what an even draw would have done differently.
+              </p>
+            </div>
+          )}
 
           {groups.length > 0 && (
             <div className="card" style={{ marginTop: '1rem' }}>
               <h2 className="section">The sheet</h2>
               {groups.map((group) => {
                 const total = group.players.reduce((sum, player) => sum + player.startingPtp, 0);
+                const split = teams
+                  .map(
+                    (team) =>
+                      `${String(group.players.filter((p) => p.teamKey === team.key).length)}`,
+                  )
+                  .join(' v ');
                 return (
                   <div key={group.id} style={{ marginBottom: '0.9rem' }}>
                     <p className="meta" style={{ marginBottom: '0.3rem' }}>
                       <b>{group.teeTime ?? '—'}</b> · group {group.sequence} · {group.players.length}{' '}
-                      {group.players.length === 1 ? 'player' : 'players'} · total {total}
+                      {group.players.length === 1 ? 'player' : 'players'}
+                      {matchPlay && teams.length === 2 ? ` · ${split}` : ` · total ${total}`}
                     </p>
+                    {group.players.length === 0 && (
+                      <p className="hint" style={{ margin: '0 0 0.4rem' }}>
+                        Empty — add somebody from the list below.
+                      </p>
+                    )}
                     <ul className="list">
                       {group.players.map((player) => (
                         <li key={player.personId}>
                           <span>
+                            {sideBadge(player)}
                             {player.displayName}
                             <br />
                             <span className="meta">PTP {player.startingPtp}</span>
@@ -358,6 +543,11 @@ export default function TeeTimesPage() {
                 <button type="button" onClick={() => void setLocked(!locked)}>
                   {locked ? 'Unlock' : 'Lock the sheet'}
                 </button>
+                {!locked && (
+                  <button type="button" className="ghost" onClick={() => void addGroup()} disabled={busy}>
+                    Add a group
+                  </button>
+                )}
               </div>
               <p className="hint">
                 Locking is what stops it moving the night before. Unlock to change anything.
@@ -372,9 +562,15 @@ export default function TeeTimesPage() {
                 {unassigned.map((player) => (
                   <li key={player.personId}>
                     <span>
+                      {sideBadge(player)}
                       {player.displayName}
                       <br />
-                      <span className="meta">PTP {player.startingPtp}</span>
+                      <span className="meta">
+                        PTP {player.startingPtp}
+                        {matchPlay && (player.teamKey === null || player.teamKey === undefined)
+                          ? ' · on neither team'
+                          : ''}
+                      </span>
                     </span>
                     {!locked && groups.length > 0 && (
                       <select

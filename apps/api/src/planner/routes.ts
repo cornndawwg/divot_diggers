@@ -34,6 +34,12 @@ import {
 } from '../roster/import.ts';
 import { computeStandings, rebuildResults } from '../scoring/standings.ts';
 import { ensureTeams, readCupSetup, suggestTeams } from '../cup/setup.ts';
+import {
+  arrangeMatchPlay,
+  checkMatchPlayGroups,
+  groupingModeFor,
+  sidesFor,
+} from '../cup/pairings.ts';
 
 /**
  * Stamped onto every cached result. A bug fix in the engine changes numbers, and the archive
@@ -1466,7 +1472,37 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
         [roundId],
       );
 
+      // Which competition this round feeds decides how its groups have to be shaped, so the
+      // screen is told rather than left to guess.
+      const event = await client.query<{ event_id: string }>(
+        'SELECT event_id FROM rounds WHERE id = $1',
+        [roundId],
+      );
+      const eventId = event.rows[0]?.event_id;
+      const ruleset = eventId === undefined ? null : await rulesetFor(client, eventId);
+      const mode = await groupingModeFor(client, roundId, ruleset);
+      const sides = mode.kind === 'match_play' ? await sidesFor(client, roundId) : [];
+      const sideOf = new Map(sides.map((member) => [member.personId, member.teamKey]));
+
+      const teams =
+        mode.kind === 'match_play' && eventId !== undefined
+          ? (
+              await client.query<{ key: string; name: string; colour: string | null }>(
+                'SELECT key, name, colour FROM cup_teams WHERE event_id = $1 ORDER BY key',
+                [eventId],
+              )
+            ).rows
+          : [];
+
+      const arrangement = groups.rows.map((group) =>
+        members.rows
+          .filter((member) => member.tee_group_id === group.id)
+          .map((member) => ({ personId: member.person_id })),
+      );
+
       return {
+        mode,
+        teams: teams.map((team) => ({ key: team.key, name: team.name, colour: team.colour })),
         groups: groups.rows.map((group) => ({
           id: group.id,
           sequence: group.sequence,
@@ -1478,13 +1514,21 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
               personId: member.person_id,
               displayName: member.display_name,
               startingPtp: Number(member.starting_ptp),
+              teamKey: sideOf.get(member.person_id) ?? null,
             })),
         })),
         unassigned: unassigned.rows.map((row) => ({
           personId: row.person_id,
           displayName: row.display_name,
           startingPtp: Number(row.starting_ptp),
+          teamKey: sideOf.get(row.person_id) ?? null,
         })),
+        // Reported, never enforced. A captain who moves two players knows something the
+        // arithmetic does not; locking the sheet is what makes it final.
+        warnings:
+          mode.kind === 'match_play' && mode.playersPerSide !== null
+            ? checkMatchPlayGroups(arrangement, sides, mode.playersPerSide)
+            : [],
       };
     });
     if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
@@ -1516,14 +1560,37 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
       );
       if (Number(locked.rows[0]?.count ?? 0) > 0) return { kind: 'locked' as const };
 
-      // Either an explicit arrangement, or one suggested from the roster.
+      const event = await client.query<{ event_id: string }>(
+        'SELECT event_id FROM rounds WHERE id = $1',
+        [roundId],
+      );
+      const eventId = event.rows[0]?.event_id;
+      const ruleset = eventId === undefined ? null : await rulesetFor(client, eventId);
+      const mode = await groupingModeFor(client, roundId, ruleset);
+      const sides = mode.kind === 'match_play' ? await sidesFor(client, roundId) : [];
+
+      // Either an explicit arrangement, or one built for whichever competition this round
+      // feeds. The two are genuinely different problems: an individual round is a grouping,
+      // where any arrangement is fair, and a team round is a pairing, where the groups are
+      // the competition.
       let arrangement: { personId: string }[][];
+      let sittingOut: string[] = [];
+
       if (Array.isArray(body.groups)) {
         arrangement = (body.groups as { personIds?: unknown }[]).map((group) =>
           (Array.isArray(group.personIds) ? group.personIds : [])
             .filter((id): id is string => typeof id === 'string')
             .map((personId) => ({ personId })),
         );
+      } else if (mode.kind === 'match_play' && mode.playersPerSide !== null) {
+        if (sides.length === 0) return { kind: 'no-teams' as const };
+        const paired = arrangeMatchPlay(
+          sides,
+          mode.playersPerSide,
+          body.strategy === 'random' ? 'random' : 'by_rank',
+        );
+        arrangement = paired.groups;
+        sittingOut = paired.sittingOut;
       } else {
         const roster = await client.query<{ person_id: string; starting_ptp: string }>(
           `SELECT ep.person_id, ep.starting_ptp FROM event_players ep
@@ -1543,6 +1610,11 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
           { strategy, groupSize },
         ).map((group) => [...group.players]);
       }
+
+      const warnings =
+        mode.kind === 'match_play' && mode.playersPerSide !== null
+          ? checkMatchPlayGroups(arrangement, sides, mode.playersPerSide)
+          : [];
 
       const times = suggestTeeTimes(
         typeof body.firstTeeTime === 'string' && body.firstTeeTime !== ''
@@ -1585,14 +1657,24 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
         await client.query('ROLLBACK');
         throw error;
       }
-      return { kind: 'saved' as const, groups: arrangement.length };
+      return { kind: 'saved' as const, groups: arrangement.length, warnings, sittingOut };
     });
 
     if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
     if (result.value.kind === 'locked') {
       return c.json({ error: 'These groupings are locked. Unlock them to change anything.' }, 409);
     }
-    return c.json({ groups: result.value.groups });
+    if (result.value.kind === 'no-teams') {
+      return c.json(
+        { error: 'Nobody is on a team yet. Set the sides up on the Cup page first.' },
+        409,
+      );
+    }
+    return c.json({
+      groups: result.value.groups,
+      warnings: result.value.warnings,
+      sittingOut: result.value.sittingOut,
+    });
   });
 
   /** Lock the sheet the night before, or unlock it when something changes. */
@@ -1833,7 +1915,30 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
             : null,
         ],
       );
-      return rows[0] ?? null;
+      // Record what this round feeds. The ruleset decides: a cup session names the round it
+      // is played on, and the individual competition takes every round that is not one. The
+      // table has carried this in the schema from the start and nothing was writing it.
+      const created = rows[0];
+      if (created !== undefined) {
+        const ruleset = await rulesetFor(client, eventId);
+        for (const competition of ruleset?.competitions ?? []) {
+          const feeds =
+            competition.type === 'team_match_play'
+              ? competition.sessions.some((session) => session.roundId === created.key)
+              : !(ruleset?.competitions ?? []).some(
+                  (other) =>
+                    other.type === 'team_match_play' &&
+                    other.sessions.some((session) => session.roundId === created.key),
+                );
+          if (!feeds) continue;
+          await client.query(
+            `INSERT INTO round_competitions (round_id, competition_key) VALUES ($1,$2)
+             ON CONFLICT DO NOTHING`,
+            [created.id, competition.id],
+          );
+        }
+      }
+      return created ?? null;
     });
 
     if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
