@@ -70,11 +70,11 @@ describe('the test connection is genuinely unprivileged', () => {
     expect(rows[0]?.rolbypassrls).toBe(false);
   });
 
-  it('can delete from exactly three tables and nowhere else', async () => {
-    // A stray DELETE grant is how history quietly disappears. Two of these are roster
-    // entries; the third is the derived results cache, which is rebuilt from scorecards and
-    // so loses nothing when cleared. Ratings are append-only, archive removal is soft, and
-    // scores are never deleted by the app at all.
+  it('can delete from exactly five tables and nowhere else', async () => {
+    // A stray DELETE grant is how history quietly disappears. Every one of these is either
+    // an arrangement that gets rebuilt or a cache: roster entries, the derived results, and
+    // the tee sheet, which is replaced wholesale each time it is laid out. Ratings are
+    // append-only, archive removal is soft, and scores are never deleted by the app at all.
     const { rows } = await database.owner.query<{ table_name: string }>(
       `SELECT DISTINCT table_name FROM information_schema.role_table_grants
         WHERE grantee = $1 AND privilege_type = 'DELETE' AND table_schema = 'public'
@@ -85,6 +85,8 @@ describe('the test connection is genuinely unprivileged', () => {
       'dogfight_results',
       'event_players',
       'event_roles',
+      'tee_group_members',
+      'tee_groups',
     ]);
   });
 
@@ -193,6 +195,20 @@ describe('ADVERSARIAL: org B reading org A', () => {
     expect(await countAs(OUTSIDER, `SELECT count(*) FROM org_members WHERE org_id = '${ORG_A}'`)).toBe(0);
   });
 
+  it('cannot read another organization’s course structure', async () => {
+    // The parent `courses` was always protected; its children were not, so every hole of
+    // every private course was readable by anyone. Measured at 567 rows before the fix.
+    expect(await countAs(OUTSIDER, 'SELECT count(*) FROM tee_sets')).toBe(0);
+    expect(await countAs(OUTSIDER, 'SELECT count(*) FROM course_holes')).toBe(0);
+    expect(await countAsOwner('SELECT count(*) FROM course_holes')).toBeGreaterThan(0);
+  });
+
+  it('cannot see who is playing with whom, or when', async () => {
+    expect(await countAs(OUTSIDER, 'SELECT count(*) FROM tee_groups')).toBe(0);
+    expect(await countAs(OUTSIDER, 'SELECT count(*) FROM tee_group_members')).toBe(0);
+    expect(await countAsOwner('SELECT count(*) FROM tee_groups')).toBeGreaterThan(0);
+  });
+
   it('cannot see another person’s sync mutations', async () => {
     expect(await countAs(OUTSIDER, 'SELECT count(*) FROM sync_mutations')).toBe(0);
     expect(await countAs(INSIDER, 'SELECT count(*) FROM sync_mutations')).toBe(1);
@@ -248,7 +264,8 @@ describe('what is deliberately shared', () => {
       [ORG_A],
     );
     expect(await countAs(OUTSIDER, 'SELECT count(*) FROM courses')).toBe(1);
-    expect(await countAs(INSIDER, 'SELECT count(*) FROM courses')).toBe(2);
+    // The shared one, org A's private one, and the one the seed adds for the child-table tests.
+    expect(await countAs(INSIDER, 'SELECT count(*) FROM courses')).toBe(3);
   });
 });
 
@@ -262,7 +279,11 @@ describe('every table is covered by RLS', () => {
     expect(rows.map((row) => row.relname)).toEqual([]);
   });
 
-  it('pins the exact set of tables with no RLS, so adding one is a deliberate act', async () => {
+  it('leaves no table without RLS at all', async () => {
+    // This list used to hold ten child tables, on the assumption they were only reachable
+    // through a protected parent. That was wrong: with no policy, a plain SELECT returns
+    // every row regardless of who is asking. Migration 0011 closed it. Invariant #5 says
+    // every table, and this is what holds that to account.
     const rows = (
       await database.owner.query<{ relname: string }>(`
         SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -272,20 +293,7 @@ describe('every table is covered by RLS', () => {
       `)
     ).rows.map((row) => row.relname);
 
-    expect(rows).toEqual([
-      // Child rows reachable only through a parent that IS protected. Leaking these needs a
-      // parent id the outsider cannot obtain.
-      'course_holes',
-      'course_nines',
-      'cup_match_players',
-      'cup_sessions',
-      'cup_team_members',
-      'hole_score_audit',
-      'round_competitions',
-      'tee_group_members',
-      'tee_groups',
-      'tee_sets',
-    ]);
+    expect(rows).toEqual([]);
   });
 });
 

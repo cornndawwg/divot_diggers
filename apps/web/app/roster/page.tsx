@@ -273,7 +273,9 @@ export default function RosterPage() {
           <p className="note">
             <Link href="/dashboard">Account</Link>
             {' · '}
-            <Link href="/courses">Courses</Link>
+            <Link href="/tee-times">Tee times</Link>
+          {' · '}
+          <Link href="/courses">Courses</Link>
           {' · '}
           <Link href="/standings">Standings</Link>
           </p>

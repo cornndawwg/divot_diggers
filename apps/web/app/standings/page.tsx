@@ -179,7 +179,9 @@ export default function StandingsPage() {
       {rounds.length === 0 ? (
         <div className="card">
           <p className="hint">
-            This event has no rounds yet. Start one from <Link href="/courses">Courses</Link>.
+            This event has no rounds yet. Start one from <Link href="/tee-times">Tee times</Link>
+          {' · '}
+          <Link href="/courses">Courses</Link>.
           </p>
         </div>
       ) : entering !== null ? (

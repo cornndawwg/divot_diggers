@@ -80,7 +80,7 @@ export async function createTestDatabase(name: string): Promise<TestDatabase> {
   // DELETE on three tables only. Two are roster entries, taken off when someone drops out.
   // The third is the derived results cache, which is rebuilt from scorecards and so loses
   // nothing when cleared. Scores and ratings are never deleted by the app.
-  await owner.query(`GRANT DELETE ON event_players, event_roles, dogfight_results TO ${role}`);
+  await owner.query(`GRANT DELETE ON event_players, event_roles, dogfight_results, tee_groups, tee_group_members TO ${role}`);
 
   const appUser = new Pool({ connectionString: urlFor(name, { name: role, password }) });
 
@@ -200,6 +200,29 @@ export async function seed(owner: Pool): Promise<void> {
   await owner.query(
     `INSERT INTO scorecards (round_id, event_player_id) VALUES ($1,$2)`,
     [ROUND_A, PLAYER_A],
+  );
+  // Course structure and a tee time, so the child-table policies have rows to hide.
+  const course = await owner.query<{ id: string }>(
+    `INSERT INTO courses (org_id, name, total_holes) VALUES ($1,'Org A Course',18) RETURNING id`,
+    [ORG_A],
+  );
+  const teeSet = await owner.query<{ id: string }>(
+    `INSERT INTO tee_sets (course_id, name) VALUES ($1,'Blue') RETURNING id`,
+    [course.rows[0]?.id],
+  );
+  for (let hole = 1; hole <= 18; hole += 1) {
+    await owner.query(
+      `INSERT INTO course_holes (tee_set_id, hole_number, par) VALUES ($1,$2,4)`,
+      [teeSet.rows[0]?.id, hole],
+    );
+  }
+  const group = await owner.query<{ id: string }>(
+    `INSERT INTO tee_groups (round_id, sequence, tee_time) VALUES ($1,1,'08:00') RETURNING id`,
+    [ROUND_A],
+  );
+  await owner.query(
+    `INSERT INTO tee_group_members (tee_group_id, event_player_id, position) VALUES ($1,$2,1)`,
+    [group.rows[0]?.id, PLAYER_A],
   );
   await owner.query(
     `INSERT INTO dogfight_results (round_id, event_player_id, target) VALUES ($1,$2,46)`,

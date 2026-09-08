@@ -14,3 +14,4 @@ export * from './lapsed-player.ts';
 export * from './match-play.ts';
 export * from './roster.ts';
 export * from './individual-target.ts';
+export * from './grouping.ts';

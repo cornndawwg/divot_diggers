@@ -19,6 +19,9 @@ import {
   manualStartingTarget,
   rosterBalance,
   seedFromHandicap,
+  suggestGroups,
+  suggestTeeTimes,
+  type GroupingStrategy,
   suggestLapsedPlayerPtp,
   type StartingTarget,
 } from '@ddga/scoring-engine';
@@ -992,6 +995,200 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
       return c.json({ error: 'This event has no cup competition configured.' }, 409);
     }
     return c.json(result.value);
+  });
+
+  // --- tee times and groupings ----------------------------------------------
+
+  app.get('/api/rounds/:id/groups', async (c) => {
+    const roundId = c.req.param('id');
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const groups = await client.query<{
+        id: string;
+        sequence: number;
+        tee_time: string | null;
+        locked_at: string | null;
+      }>(
+        'SELECT id, sequence, tee_time, locked_at FROM tee_groups WHERE round_id = $1 ORDER BY sequence',
+        [roundId],
+      );
+      const members = await client.query<{
+        tee_group_id: string;
+        person_id: string;
+        display_name: string;
+        starting_ptp: string;
+        position: number | null;
+      }>(
+        `SELECT m.tee_group_id, ep.person_id, p.display_name, ep.starting_ptp, m.position
+           FROM tee_group_members m
+           JOIN tee_groups g ON g.id = m.tee_group_id
+           JOIN event_players ep ON ep.id = m.event_player_id
+           JOIN people p ON p.id = ep.person_id
+          WHERE g.round_id = $1
+          ORDER BY m.position NULLS LAST, p.display_name`,
+        [roundId],
+      );
+
+      const unassigned = await client.query<{
+        person_id: string;
+        display_name: string;
+        starting_ptp: string;
+      }>(
+        `SELECT ep.person_id, p.display_name, ep.starting_ptp
+           FROM event_players ep
+           JOIN people p ON p.id = ep.person_id
+           JOIN rounds r ON r.event_id = ep.event_id
+          WHERE r.id = $1
+            AND NOT EXISTS (
+              SELECT 1 FROM tee_group_members m JOIN tee_groups g ON g.id = m.tee_group_id
+               WHERE g.round_id = r.id AND m.event_player_id = ep.id)
+          ORDER BY p.display_name`,
+        [roundId],
+      );
+
+      return {
+        groups: groups.rows.map((group) => ({
+          id: group.id,
+          sequence: group.sequence,
+          teeTime: group.tee_time === null ? null : group.tee_time.slice(0, 5),
+          locked: group.locked_at !== null,
+          players: members.rows
+            .filter((member) => member.tee_group_id === group.id)
+            .map((member) => ({
+              personId: member.person_id,
+              displayName: member.display_name,
+              startingPtp: Number(member.starting_ptp),
+            })),
+        })),
+        unassigned: unassigned.rows.map((row) => ({
+          personId: row.person_id,
+          displayName: row.display_name,
+          startingPtp: Number(row.starting_ptp),
+        })),
+      };
+    });
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    return c.json(result.value);
+  });
+
+  /**
+   * Lay out a round's tee sheet.
+   *
+   * A suggestion is only ever a starting point — spec 4.3 says the planner adjusts and
+   * confirms, and nothing auto-commits. Saving replaces the whole sheet, because a tee sheet
+   * is one arrangement rather than a set of independent rows, and a half-updated sheet is
+   * worse than either version of it.
+   */
+  app.post('/api/rounds/:id/groups', async (c) => {
+    const roundId = c.req.param('id');
+    const body = (await c.req.json().catch(() => ({}))) as {
+      strategy?: unknown;
+      groupSize?: unknown;
+      firstTeeTime?: unknown;
+      intervalMinutes?: unknown;
+      groups?: unknown;
+    };
+
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const locked = await client.query<{ count: string }>(
+        'SELECT count(*) FROM tee_groups WHERE round_id = $1 AND locked_at IS NOT NULL',
+        [roundId],
+      );
+      if (Number(locked.rows[0]?.count ?? 0) > 0) return { kind: 'locked' as const };
+
+      // Either an explicit arrangement, or one suggested from the roster.
+      let arrangement: { personId: string }[][];
+      if (Array.isArray(body.groups)) {
+        arrangement = (body.groups as { personIds?: unknown }[]).map((group) =>
+          (Array.isArray(group.personIds) ? group.personIds : [])
+            .filter((id): id is string => typeof id === 'string')
+            .map((personId) => ({ personId })),
+        );
+      } else {
+        const roster = await client.query<{ person_id: string; starting_ptp: string }>(
+          `SELECT ep.person_id, ep.starting_ptp FROM event_players ep
+             JOIN rounds r ON r.event_id = ep.event_id WHERE r.id = $1`,
+          [roundId],
+        );
+        const strategy = (
+          typeof body.strategy === 'string' ? body.strategy : 'balanced'
+        ) as GroupingStrategy;
+        const groupSize =
+          typeof body.groupSize === 'number' && body.groupSize > 0 ? body.groupSize : 4;
+        arrangement = suggestGroups(
+          roster.rows.map((row) => ({
+            player: { personId: row.person_id },
+            target: Number(row.starting_ptp),
+          })),
+          { strategy, groupSize },
+        ).map((group) => [...group.players]);
+      }
+
+      const times = suggestTeeTimes(
+        typeof body.firstTeeTime === 'string' && body.firstTeeTime !== ''
+          ? body.firstTeeTime
+          : '08:00',
+        arrangement.length,
+        typeof body.intervalMinutes === 'number' && body.intervalMinutes > 0
+          ? body.intervalMinutes
+          : 10,
+      );
+
+      await client.query('BEGIN');
+      try {
+        // The sheet is one arrangement, so it is replaced rather than patched.
+        await client.query(
+          `DELETE FROM tee_group_members WHERE tee_group_id IN
+             (SELECT id FROM tee_groups WHERE round_id = $1)`,
+          [roundId],
+        );
+        await client.query('DELETE FROM tee_groups WHERE round_id = $1', [roundId]);
+
+        for (const [index, group] of arrangement.entries()) {
+          const created = await client.query<{ id: string }>(
+            `INSERT INTO tee_groups (round_id, sequence, tee_time) VALUES ($1,$2,$3) RETURNING id`,
+            [roundId, index + 1, times[index] ?? null],
+          );
+          const groupId = created.rows[0]?.id;
+          for (const [position, member] of group.entries()) {
+            await client.query(
+              `INSERT INTO tee_group_members (tee_group_id, event_player_id, position)
+               SELECT $1, ep.id, $3 FROM event_players ep
+                 JOIN rounds r ON r.event_id = ep.event_id
+                WHERE r.id = $4 AND ep.person_id = $2`,
+              [groupId, member.personId, position + 1, roundId],
+            );
+          }
+        }
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      }
+      return { kind: 'saved' as const, groups: arrangement.length };
+    });
+
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (result.value.kind === 'locked') {
+      return c.json({ error: 'These groupings are locked. Unlock them to change anything.' }, 409);
+    }
+    return c.json({ groups: result.value.groups });
+  });
+
+  /** Lock the sheet the night before, or unlock it when something changes. */
+  app.post('/api/rounds/:id/groups/lock', async (c) => {
+    const roundId = c.req.param('id');
+    const body = (await c.req.json().catch(() => ({}))) as { locked?: unknown };
+    const locked = body.locked !== false;
+
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const updated = await client.query(
+        `UPDATE tee_groups SET locked_at = ${locked ? 'now()' : 'NULL'} WHERE round_id = $1`,
+        [roundId],
+      );
+      return updated.rowCount ?? 0;
+    });
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    return c.json({ locked, groups: result.value });
   });
 
   // --- scores and standings ------------------------------------------------
