@@ -33,6 +33,25 @@ const auth = createAuth({
 
 const app = createApp({ auth, privilegedPool, domainPool, webUrl: env.webUrl });
 
+/**
+ * In production, connecting domain queries as the owner is not a warning, it is a breach.
+ *
+ * A Postgres table owner bypasses its own row level security, so an API without a separate
+ * non-owning role has every tenancy policy in the schema switched off — org A can read org
+ * B, and nothing in the logs, the tests or the console says a word. On a developer's machine
+ * that is a nuisance worth a warning. On a deployed server it is the whole of invariant #5,
+ * so refuse to start instead.
+ */
+if (process.env['NODE_ENV'] === 'production' && process.env['APP_DATABASE_URL'] === undefined) {
+  console.error(
+    '\nAPP_DATABASE_URL is not set.\n\n' +
+      'Domain queries would run as the database owner, which bypasses every row level\n' +
+      'security policy and lets one group read another\'s data. Create the non-owning role\n' +
+      'with `pnpm db:provision-role`, then set APP_DATABASE_URL to its connection string.\n',
+  );
+  process.exit(1);
+}
+
 const port = Number(process.env['PORT'] ?? 8787);
 
 // Fail with something actionable rather than a stack trace from the first query.
@@ -69,7 +88,16 @@ process.on('uncaughtException', (error: NodeJS.ErrnoException) => {
   throw error;
 });
 
-serve({ fetch: app.fetch, port }, (info) => {
+/**
+ * Bind on every interface, IPv6 included.
+ *
+ * The default is 0.0.0.0, which is IPv4 only. Railway's private network resolves
+ * <service>.railway.internal to an IPv6 address, so an API bound to 0.0.0.0 is simply
+ * unreachable from the console service and every proxied request fails to connect.
+ */
+const hostname = process.env['HOST'] ?? '::';
+
+serve({ fetch: app.fetch, port, hostname }, (info) => {
   console.log(`API listening on http://localhost:${info.port}`);
   console.log(`  auth routes  ${env.publicUrl}/api/auth/*`);
   console.log(`  console      ${env.webUrl}`);
