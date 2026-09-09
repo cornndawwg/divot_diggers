@@ -1,6 +1,6 @@
 // Build a past event in the database from its golden fixture.
 //
-//   pnpm history:seed <org-slug> <year>
+//   pnpm history:seed <org-slug> <year> [ruleset-key]
 //
 // Everything goes in through the same paths the console uses: the roster importer, the
 // totals-only scorecard write from task 2.9, and the standings rebuild. Nothing here does
@@ -15,9 +15,9 @@ import { loadEnv } from '../src/env.ts';
 
 const ENGINE_VERSION = '1.0.0';
 
-const [slug, yearArg] = process.argv.slice(2);
+const [slug, yearArg, rulesetKey] = process.argv.slice(2);
 if (slug === undefined || yearArg === undefined) {
-  console.error('Usage: pnpm history:seed <org-slug> <year>');
+  console.error('Usage: pnpm history:seed <org-slug> <year> [ruleset-key]');
   process.exit(1);
 }
 const year = Number(yearArg);
@@ -78,12 +78,25 @@ async function main(): Promise<void> {
   if (ownerId === undefined) throw new Error('That group has no owner, so there is nobody to act as.');
   await client.query('SELECT set_config($1, $2, false)', ['app.person_id', ownerId]);
 
-  const ruleset = await client.query<{ document: unknown }>(
-    'SELECT document FROM rulesets WHERE org_id = $1 ORDER BY version DESC LIMIT 1',
-    [orgId],
+  // Most recently published wins, exactly as the console decides it. Ordering by version
+  // alone is meaningless the moment a group holds two different rulesets: versions count up
+  // per ruleset key, so both start at 1 and the choice between them is arbitrary. That is
+  // how a group's real rules lost to the starter template that ships with a new group.
+  const ruleset = await client.query<{ document: unknown; name: string; key: string }>(
+    `SELECT document, name, key FROM rulesets
+      WHERE org_id = $1 AND published_at IS NOT NULL
+        AND ($2::text IS NULL OR key = $2)
+      ORDER BY published_at DESC, version DESC LIMIT 1`,
+    [orgId, rulesetKey ?? null],
   );
   const document = ruleset.rows[0]?.document;
-  if (document === undefined) throw new Error('That group has no ruleset. Run pnpm rulesets:seed.');
+  if (document === undefined) {
+    throw new Error(
+      rulesetKey === undefined
+        ? 'That group has no published ruleset. Run pnpm rulesets:seed.'
+        : `That group has no published ruleset with key "${rulesetKey}".`,
+    );
+  }
   const parsed = parseRuleset(document);
   const competition = parsed.competitions.find(
     (entry): entry is IndividualTargetCompetition => entry.type === 'individual_target',
@@ -102,10 +115,11 @@ async function main(): Promise<void> {
   const event = await client.query<{ id: string }>(
     `INSERT INTO events (org_id, name, year, status, ruleset_id, ruleset_snapshot)
      VALUES ($1,$2,$3,'completed',
-             (SELECT id FROM rulesets WHERE org_id = $1 ORDER BY version DESC LIMIT 1),
+             (SELECT id FROM rulesets WHERE org_id = $1 AND key = $5 AND published_at IS NOT NULL
+               ORDER BY published_at DESC, version DESC LIMIT 1),
              $4)
      RETURNING id`,
-    [orgId, name, year, JSON.stringify(document)],
+    [orgId, name, year, JSON.stringify(document), ruleset.rows[0]?.key],
   );
   const eventId = event.rows[0]?.id;
   if (eventId === undefined) throw new Error('the event insert returned no id');
@@ -187,7 +201,8 @@ async function main(): Promise<void> {
 
   console.log(
     `${name}: ${String(fixture.cases.length)} players, ` +
-      `${String(fixture.roundsInFixture)} rounds, scored and stored.`,
+      `${String(fixture.roundsInFixture)} rounds, scored and stored ` +
+      `against "${ruleset.rows[0]?.name ?? 'unknown rules'}".`,
   );
 }
 
