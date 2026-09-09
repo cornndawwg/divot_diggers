@@ -32,7 +32,7 @@ import {
   type RosterImportOutcome,
   type RosterImportRow,
 } from '../roster/import.ts';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { computeStandings, rebuildResults } from '../scoring/standings.ts';
 import type { Mailer } from '../mail/mailer.ts';
 import { groupInvitationEmail } from '../mail/templates.ts';
@@ -103,6 +103,8 @@ function isConflict(error: unknown): boolean {
  */
 const FUNCTION_REFUSALS = [
   /not a member of that organization/i,
+  /can issue a join code/i,
+  /can withdraw a join code/i,
   /Not signed in/i,
   /Only a group owner/i,
   /A group role is owner, admin or member/i,
@@ -121,6 +123,9 @@ function isRefusedByFunction(error: unknown): boolean {
  * they know whether to ask for another one.
  */
 const INVITATION_PROBLEMS = [
+  /code does not match an event/i,
+  /code has expired/i,
+  /event has finished/i,
   /invitation link is not valid/i,
   /invitation was withdrawn/i,
   /invitation has already been used/i,
@@ -652,6 +657,118 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
         [orgId],
       );
       return { orgId, name: org.rows[0]?.name ?? null };
+    });
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    return c.json(result.value);
+  });
+
+  // --- join codes -----------------------------------------------------------
+
+  /**
+   * Six characters a person can read off a phone screen and type on a first tee.
+   *
+   * The alphabet leaves out O, 0, I and 1 — the pairs that get misread and mistyped, which
+   * on a first tee means somebody standing there saying "it says it's wrong" while three
+   * other people wait. 32 characters over 6 places is about a billion codes, and they expire.
+   */
+  const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+  function newJoinCode(): string {
+    const bytes = randomBytes(6);
+    let code = '';
+    for (const byte of bytes) {
+      code += CODE_ALPHABET[byte % CODE_ALPHABET.length];
+    }
+    return code;
+  }
+
+  /** Issue a code for an event, or roll the one it has. */
+  app.post('/api/events/:id/join-code', async (c) => {
+    const eventId = c.req.param('id');
+    const body = (await c.req.json().catch(() => ({}))) as { days?: unknown };
+    const days =
+      typeof body.days === 'number' && body.days > 0 && body.days <= 365
+        ? Math.floor(body.days)
+        : 30;
+
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      // A unique index sits on join_code across every group, so a collision is possible
+      // however unlikely. Try again rather than handing back an error nobody can act on.
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        try {
+          const { rows } = await client.query<{ set_event_join_code: string }>(
+            'SELECT set_event_join_code($1,$2,$3)',
+            [eventId, newJoinCode(), days],
+          );
+          return { code: rows[0]?.set_event_join_code ?? null, days };
+        } catch (error) {
+          if (!isConflict(error)) throw error;
+        }
+      }
+      throw new Error('could not find an unused join code');
+    });
+
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    return c.json(result.value);
+  });
+
+  /** Withdraw it. The event carries on; the code stops working. */
+  app.post('/api/events/:id/join-code/clear', async (c) => {
+    const eventId = c.req.param('id');
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      await client.query('SELECT clear_event_join_code($1)', [eventId]);
+      return { code: null };
+    });
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    return c.json(result.value);
+  });
+
+  /** What the console shows beside the event. */
+  app.get('/api/events/:id/join-code', async (c) => {
+    const eventId = c.req.param('id');
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const { rows } = await client.query<{
+        join_code: string | null;
+        join_code_expires: string | null;
+      }>('SELECT join_code, join_code_expires FROM events WHERE id = $1', [eventId]);
+      const row = rows[0];
+      const expires = row?.join_code_expires ?? null;
+      return {
+        code: row?.join_code ?? null,
+        expiresAt: expires,
+        expired: expires !== null && new Date(expires).getTime() < Date.now(),
+      };
+    });
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    return c.json(result.value);
+  });
+
+  /**
+   * Redeem one. This is the phone app's way in, and the only endpoint a person who belongs
+   * to nothing yet can usefully call.
+   */
+  app.post('/api/join', async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as { code?: unknown };
+    const code = typeof body.code === 'string' ? body.code.trim() : '';
+    if (code === '') return c.json({ error: 'Enter the code from your group.' }, 400);
+
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const { rows } = await client.query<{ join_event_with_code: string }>(
+        'SELECT join_event_with_code($1)',
+        [code],
+      );
+      const eventId = rows[0]?.join_event_with_code;
+      const event = await client.query<{ name: string; year: number; org: string }>(
+        `SELECT e.name, e.year, o.name AS org FROM events e
+           JOIN organizations o ON o.id = e.org_id WHERE e.id = $1`,
+        [eventId],
+      );
+      return {
+        eventId,
+        name: event.rows[0]?.name ?? null,
+        year: event.rows[0]?.year ?? null,
+        group: event.rows[0]?.org ?? null,
+      };
     });
     if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
     return c.json(result.value);

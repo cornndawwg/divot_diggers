@@ -49,6 +49,13 @@ const SOURCE_LABEL: Record<string, string> = {
 
 export default function RosterPage() {
   const [eventId, setEventId] = useState('');
+  const [joinCode, setJoinCode] = useState<{
+    code: string | null;
+    expiresAt: string | null;
+    expired: boolean;
+  }>({ code: null, expiresAt: null, expired: false });
+  const [codeBusy, setCodeBusy] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
   const [events, setEvents] = useState<{ id: string; name: string; year: number }[]>([]);
   const [newEventName, setNewEventName] = useState('');
   const [newEventYear, setNewEventYear] = useState(String(new Date().getFullYear()));
@@ -100,6 +107,14 @@ export default function RosterPage() {
     }
     const active = id ?? loaded[0]?.id ?? '';
     setEventId(active);
+    void fetch(`${apiUrl}/api/events/${active}/join-code`, { credentials: 'include' })
+      .then(async (response) =>
+        response.ok
+          ? ((await response.json()) as typeof joinCode)
+          : { code: null, expiresAt: null, expired: false },
+      )
+      .then(setJoinCode)
+      .catch(() => undefined);
 
     const [archiveResponse, rosterResponse, balanceResponse] = await Promise.all([
       fetch(`${apiUrl}/api/people?eventId=${active}`, { credentials: 'include' }),
@@ -327,6 +342,36 @@ export default function RosterPage() {
     });
     setMessage(`${person.displayName} is back, with their rating history.`);
     await load(eventId);
+  }
+
+  async function issueJoinCode() {
+    setCodeBusy(true);
+    setCodeCopied(false);
+    const response = await fetch(`${apiUrl}/api/events/${eventId}/join-code`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ days: 30 }),
+    });
+    setCodeBusy(false);
+    if (!response.ok) return;
+    const body = (await response.json()) as { code: string };
+    setJoinCode({
+      code: body.code,
+      expiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+      expired: false,
+    });
+  }
+
+  async function withdrawJoinCode() {
+    setCodeBusy(true);
+    setCodeCopied(false);
+    await fetch(`${apiUrl}/api/events/${eventId}/join-code/clear`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    setCodeBusy(false);
+    setJoinCode({ code: null, expiresAt: null, expired: false });
   }
 
   if (state === 'loading') return <div className="card">Loading…</div>;
@@ -659,6 +704,63 @@ export default function RosterPage() {
           )}
         </div>
       )}
+
+      <div className="card" style={{ marginTop: '1rem' }}>
+        <h2 className="section">Let players join themselves</h2>
+        <p className="hint" style={{ marginTop: 0 }}>
+          Read this out and players can add themselves from the phone app, rather than you
+          typing in twenty-four people. It lets them into the group and this event as a
+          player — nothing else, and it does not put them on the roster.
+        </p>
+        {joinCode.code === null ? (
+          <button type="button" onClick={() => void issueJoinCode()} disabled={codeBusy}>
+            {codeBusy ? 'Working…' : 'Create a join code'}
+          </button>
+        ) : (
+          <>
+            <p
+              style={{
+                fontSize: '2rem',
+                fontWeight: 700,
+                letterSpacing: '0.28em',
+                margin: '0.3rem 0 0.2rem',
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              {joinCode.code}
+            </p>
+            <p className="meta">
+              {joinCode.expired
+                ? 'Expired — roll it to get a working one.'
+                : joinCode.expiresAt === null
+                  ? 'No expiry set.'
+                  : `Works until ${new Date(joinCode.expiresAt).toLocaleDateString()}.`}
+            </p>
+            <div className="row" style={{ marginTop: '0.6rem' }}>
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(joinCode.code ?? '');
+                  setCodeCopied(true);
+                }}
+              >
+                {codeCopied ? 'Copied' : 'Copy'}
+              </button>
+              <button type="button" className="ghost" onClick={() => void issueJoinCode()} disabled={codeBusy}>
+                Roll a new one
+              </button>
+              <button type="button" className="ghost" onClick={() => void withdrawJoinCode()} disabled={codeBusy}>
+                Withdraw
+              </button>
+            </div>
+            <p className="hint">
+              Rolling a new code stops the old one working immediately, which is what to do if
+              it ends up somewhere it should not be.
+            </p>
+          </>
+        )}
+      </div>
 
       <div className="card" style={{ marginTop: '1rem' }}>
         <h2 className="section">From a spreadsheet</h2>
