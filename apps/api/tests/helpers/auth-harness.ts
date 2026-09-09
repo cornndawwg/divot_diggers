@@ -88,7 +88,7 @@ export async function createAuthHarness(name: string): Promise<AuthHarness> {
     mailer,
   });
 
-  const app = createApp({ auth, privilegedPool, domainPool, webUrl: WEB_URL });
+  const app = createApp({ auth, privilegedPool, domainPool, webUrl: WEB_URL, mailer });
 
   return {
     app,

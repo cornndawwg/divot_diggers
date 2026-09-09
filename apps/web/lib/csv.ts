@@ -75,7 +75,7 @@ export interface RosterRow {
 
 export interface RosterParse {
   readonly rows: RosterRow[];
-  /** Which column each field was read from, so the planner can see it guessed right. */
+  /** Which column each field was read from, so the group admin can see it guessed right. */
   readonly columns: Record<string, string>;
   readonly problems: string[];
 }

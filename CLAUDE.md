@@ -104,6 +104,14 @@ docs/                     Specs. Read before implementing a subsystem.
 | **Handicap index** | Portable ability rating. Used only to seed a first-timer's PTP. |
 | **Course handicap** | Index adjusted for a specific tee set's slope. **Not used** for PTP here. |
 | **Scramble / Alternate shot / Singles** | The three Cup formats, one per day. |
+| **Group Owner** | Runs a group. Everything a Group Admin can do, plus appointing owners. |
+| **Group Admin** | Runs a group's events, roster, courses and rules. Group-wide, not per-event. |
+
+Authority is **group-wide, not per-event**: a Group Owner or Group Admin administers every
+event their group has ever run. Captain and player stay per-event. The database still spells
+the event-level administrator role `planner`, and `has_event_role(event, 'planner')` answers
+"may you administer this event" — renaming that value would mean rewriting thirty-four
+policies for no behavioural gain, so the word survives in the schema and nowhere on screen.
 
 ## Reference documents
 

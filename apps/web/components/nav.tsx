@@ -6,13 +6,14 @@ import { useEffect, useState } from 'react';
 import { apiUrl, authClient } from '../lib/auth-client';
 
 /**
- * The planner's way around.
+ * A group admin's way around.
  *
- * Ordered the way a season is built rather than alphabetically: people first, then where they
- * play, then when, then what happened. Hidden on the signed-out pages, where there is nowhere
- * to go but in.
+ * Ordered the way a season is built rather than alphabetically: who runs the group, then its
+ * people, then where they play, then when, then what happened. Hidden on the signed-out
+ * pages, where there is nowhere to go but in.
  */
 const LINKS = [
+  { href: '/group', label: 'Group' },
   { href: '/roster', label: 'Roster' },
   { href: '/courses', label: 'Courses' },
   { href: '/rounds', label: 'Rounds' },
@@ -22,7 +23,15 @@ const LINKS = [
   { href: '/rulesets', label: 'Rules' },
 ];
 
-const SIGNED_OUT = ['/sign-in', '/sign-up', '/forgot-password', '/reset-password', '/verified'];
+const SIGNED_OUT = [
+  '/sign-in',
+  '/sign-up',
+  '/forgot-password',
+  '/reset-password',
+  '/verified',
+  // An invited person lands here before they have an account, so there is nothing to navigate.
+  '/join',
+];
 
 export function Nav() {
   const pathname = usePathname();

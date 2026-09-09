@@ -44,3 +44,40 @@ export function passwordResetEmail(to: string, url: string): OutboundEmail {
     ),
   };
 }
+
+/** What a group role is called on screen, so an email and the console agree. */
+export const GROUP_ROLE_LABELS: Record<string, string> = {
+  owner: 'Group Owner',
+  admin: 'Group Admin',
+  member: 'Member',
+};
+
+export function groupInvitationEmail(
+  to: string,
+  url: string,
+  groupName: string,
+  role: string,
+  invitedBy: string | null,
+): OutboundEmail {
+  const roleLabel = GROUP_ROLE_LABELS[role] ?? role;
+  const from = invitedBy === null ? '' : ` by ${invitedBy}`;
+  const what =
+    role === 'member'
+      ? `You have been invited${from} to join ${groupName}.`
+      : `You have been invited${from} to join ${groupName} as ${
+          roleLabel === 'Group Admin' ? 'a' : 'the'
+        } ${roleLabel}.`;
+
+  return {
+    to,
+    subject: `Join ${groupName}`,
+    text:
+      `${what}\n\n${url}\n\n` +
+      'The link expires in 14 days. If you were not expecting this, you can ignore it.',
+    html: layout(
+      `Join ${groupName}`,
+      `${what} The link expires in 14 days. If you were not expecting this, you can ignore it.`,
+      { label: 'Accept invitation', url },
+    ),
+  };
+}

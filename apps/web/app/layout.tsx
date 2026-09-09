@@ -4,7 +4,7 @@ import './globals.css';
 
 export const metadata = {
   title: 'Divot Diggers',
-  description: 'Planner console',
+  description: 'Group console',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

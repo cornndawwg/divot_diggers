@@ -112,7 +112,7 @@ export default function DashboardPage() {
           <dt>Events</dt>
           <dd>
             {me.events.length === 0
-              ? 'None yet — a planner will add you to an event roster.'
+              ? 'None yet — a group admin will add you to an event roster.'
               : me.events.map((event) => (
                   <div key={event.eventId}>
                     {event.eventName} — {event.roles.join(', ')}

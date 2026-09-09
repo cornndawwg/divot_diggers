@@ -806,3 +806,40 @@ export const roundCompetitions = pgTable("round_competitions", {
 		}).onDelete("cascade"),
 	primaryKey({ columns: [table.roundId, table.competitionKey], name: "round_competitions_pkey"}),
 ]);
+
+export const orgInvitations = pgTable("org_invitations", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	orgId: uuid("org_id").notNull(),
+	email: text().notNull(),
+	role: text().notNull(),
+	tokenHash: text("token_hash").notNull(),
+	invitedBy: uuid("invited_by"),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	expiresAt: timestamp("expires_at", { withTimezone: true, mode: 'string' }).notNull(),
+	acceptedAt: timestamp("accepted_at", { withTimezone: true, mode: 'string' }),
+	acceptedBy: uuid("accepted_by"),
+	revokedAt: timestamp("revoked_at", { withTimezone: true, mode: 'string' }),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	rowVersion: bigint("row_version", { mode: "number" }).default(sql`nextval('row_version_seq'::regclass)`).notNull(),
+}, (table) => [
+	index("org_invitation_by_org").using("btree", table.orgId.asc().nullsLast().op("uuid_ops")),
+	uniqueIndex("org_invitation_one_open").using("btree", table.orgId.asc().nullsLast().op("uuid_ops"), sql`lower(email)`).where(sql`((accepted_at IS NULL) AND (revoked_at IS NULL))`),
+	foreignKey({
+			columns: [table.orgId],
+			foreignColumns: [organizations.id],
+			name: "org_invitations_org_id_fkey"
+		}).onDelete("cascade"),
+	foreignKey({
+			columns: [table.invitedBy],
+			foreignColumns: [people.id],
+			name: "org_invitations_invited_by_fkey"
+		}).onDelete("set null"),
+	foreignKey({
+			columns: [table.acceptedBy],
+			foreignColumns: [people.id],
+			name: "org_invitations_accepted_by_fkey"
+		}).onDelete("set null"),
+	unique("org_invitations_token_hash_key").on(table.tokenHash),
+	check("invitation_not_both_ways", sql`(accepted_at IS NULL) OR (revoked_at IS NULL)`),
+	check("org_invitations_role_check", sql`role = ANY (ARRAY['owner'::text, 'admin'::text, 'member'::text])`),
+]);

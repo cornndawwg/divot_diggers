@@ -4,7 +4,7 @@ import type { Ruleset } from '@ddga/types';
  * The editor works on the ruleset document itself, not on a parallel form model.
  *
  * That is deliberate: the document is the storage format and the API contract, and the same
- * Zod schema that validates it on the server validates the draft here as the planner types.
+ * Zod schema that validates it on the server validates the draft here as the group admin types.
  * A second shape in between is a second thing to keep in sync.
  *
  * The draft is loosely typed on purpose — a half-finished ruleset is not yet a valid one, and
@@ -153,7 +153,7 @@ export function describeRelativeToPar(relativeToPar: number): string {
  * Conventional names, offered only as a starting label for a new row.
  *
  * This is a display convenience, not a scoring rule: nothing here affects what a score is
- * worth, and the planner renames any of them freely. A group that calls a birdie something
+ * worth, and a group admin renames any of them freely. A group that calls a birdie something
  * else types that instead.
  */
 const CONVENTIONAL_NAMES: Record<string, string> = {

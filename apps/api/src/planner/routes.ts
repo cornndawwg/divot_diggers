@@ -32,7 +32,10 @@ import {
   type RosterImportOutcome,
   type RosterImportRow,
 } from '../roster/import.ts';
+import { createHash, randomUUID } from 'node:crypto';
 import { computeStandings, rebuildResults } from '../scoring/standings.ts';
+import type { Mailer } from '../mail/mailer.ts';
+import { groupInvitationEmail } from '../mail/templates.ts';
 import { ensureTeams, readCupSetup, suggestTeams } from '../cup/setup.ts';
 import {
   arrangeMatchPlay,
@@ -51,6 +54,8 @@ export interface PlannerDeps {
   readonly auth: Auth;
   readonly privilegedPool: Pool;
   readonly domainPool: Pool;
+  readonly webUrl: string;
+  readonly mailer?: Mailer;
 }
 
 /** A slug a human would recognise, derived from the group's name. */
@@ -87,12 +92,51 @@ function isConflict(error: unknown): boolean {
   );
 }
 
-/** Raised by the SECURITY DEFINER bootstrap functions when the caller is not entitled. */
+/**
+ * Raised by the SECURITY DEFINER functions when the caller is not entitled.
+ *
+ * These are authorization outcomes and must surface as 403s. Matching on message text is
+ * fragile — adding `set_org_role` in 0017 changed one of these messages and turned a correct
+ * refusal into a 500 until this list caught up — so the patterns are kept together here, and
+ * `refusalMessage` passes the database's own wording through rather than flattening every
+ * refusal into one unhelpful sentence.
+ */
+const FUNCTION_REFUSALS = [
+  /not a member of that organization/i,
+  /Not signed in/i,
+  /Only a group owner/i,
+  /A group role is owner, admin or member/i,
+  /only owner/i,
+];
+
 function isRefusedByFunction(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    /not a member of that organization|Not signed in, so there is nobody/i.test(error.message)
-  );
+  return error instanceof Error && FUNCTION_REFUSALS.some((rule) => rule.test(error.message));
+}
+
+/**
+ * Something wrong with the invitation itself rather than with who is asking.
+ *
+ * A used, withdrawn or expired link is an ordinary thing to click, not a permission failure
+ * and certainly not a server fault. The person holding it needs to be told which it was so
+ * they know whether to ask for another one.
+ */
+const INVITATION_PROBLEMS = [
+  /invitation link is not valid/i,
+  /invitation was withdrawn/i,
+  /invitation has already been used/i,
+  /invitation has expired/i,
+];
+
+function isInvitationProblem(error: unknown): boolean {
+  return error instanceof Error && INVITATION_PROBLEMS.some((rule) => rule.test(error.message));
+}
+
+/** The database's own words, which say something more useful than "not permitted". */
+function refusalMessage(error: unknown): string {
+  if (!(error instanceof Error)) return 'You do not have permission to do that.';
+  // node-postgres prefixes nothing, but plpgsql RAISE text can arrive with trailing detail.
+  const first = error.message.split('\n')[0]?.trim() ?? '';
+  return first === '' ? 'You do not have permission to do that.' : first;
 }
 
 export function plannerRoutes(deps: PlannerDeps): Hono {
@@ -100,7 +144,13 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
   const app = new Hono();
 
   app.onError((error, c) => {
-    if (isPermissionDenied(error) || isRefusedByFunction(error)) {
+    if (isInvitationProblem(error)) {
+      return c.json({ error: refusalMessage(error) }, 410);
+    }
+    if (isRefusedByFunction(error)) {
+      return c.json({ error: refusalMessage(error) }, 403);
+    }
+    if (isPermissionDenied(error)) {
       return c.json({ error: 'You do not have permission to do that.' }, 403);
     }
     if (error instanceof HoleSelectionError) {
@@ -441,6 +491,171 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
       ) ?? null
     );
   }
+
+  // --- group membership and invitations ------------------------------------
+
+  /**
+   * The token in the emailed link is the secret, so only its hash is stored. Nothing ever
+   * needs the original again — accepting hashes what it is given and looks that up — which
+   * means a leaked backup hands nobody a working invitation.
+   */
+  function hashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  /** Who is in this group and what they do. */
+  app.get('/api/organizations/:id/members', async (c) => {
+    const orgId = c.req.param('id');
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const members = await client.query<{
+        person_id: string;
+        display_name: string;
+        email: string | null;
+        role: string;
+        joined_at: string;
+      }>(
+        `SELECT m.person_id, p.display_name, p.email, m.role, m.joined_at
+           FROM org_members m JOIN people p ON p.id = m.person_id
+          WHERE m.org_id = $1 AND m.removed_at IS NULL
+          ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+                   p.display_name`,
+        [orgId],
+      );
+      const invitations = await client.query<{
+        id: string;
+        email: string;
+        role: string;
+        created_at: string;
+        expires_at: string;
+      }>(
+        `SELECT id, email, role, created_at, expires_at FROM org_invitations
+          WHERE org_id = $1 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now()
+          ORDER BY created_at DESC`,
+        [orgId],
+      );
+      return {
+        members: members.rows.map((row) => ({
+          personId: row.person_id,
+          displayName: row.display_name,
+          email: row.email,
+          role: row.role,
+        })),
+        invitations: invitations.rows.map((row) => ({
+          id: row.id,
+          email: row.email,
+          role: row.role,
+          expiresAt: row.expires_at,
+        })),
+      };
+    });
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    return c.json(result.value);
+  });
+
+  /** Change what somebody does in the group. */
+  app.post('/api/organizations/:id/members/:personId/role', async (c) => {
+    const orgId = c.req.param('id');
+    const personId = c.req.param('personId');
+    const body = (await c.req.json().catch(() => ({}))) as { role?: unknown };
+    const role = typeof body.role === 'string' ? body.role : '';
+
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      await client.query('SELECT set_org_role($1,$2,$3)', [orgId, personId, role]);
+      return { ok: true };
+    });
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    return c.json(result.value);
+  });
+
+  /** Invite somebody in, at the role they will hold when they accept. */
+  app.post('/api/organizations/:id/invitations', async (c) => {
+    const orgId = c.req.param('id');
+    const body = (await c.req.json().catch(() => ({}))) as { email?: unknown; role?: unknown };
+    const email = typeof body.email === 'string' ? body.email.trim() : '';
+    const role = typeof body.role === 'string' ? body.role : 'member';
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      return c.json({ error: 'That does not look like an email address.' }, 400);
+    }
+    if (deps.mailer === undefined) {
+      return c.json({ error: 'Email is not configured, so invitations cannot be sent.' }, 503);
+    }
+
+    // Generated here, hashed before it is stored, and only ever seen in the email.
+    const token = randomUUID() + randomUUID().replace(/-/g, '');
+
+    const result = await asSignedIn(c.req.raw.headers, async (client, personId) => {
+      const org = await client.query<{ name: string }>(
+        'SELECT name FROM organizations WHERE id = $1',
+        [orgId],
+      );
+      const groupName = org.rows[0]?.name;
+      if (groupName === undefined) return { kind: 'no-group' as const };
+
+      const inviter = await client.query<{ display_name: string }>(
+        'SELECT display_name FROM people WHERE id = $1',
+        [personId],
+      );
+      const created = await client.query<{ invite_to_org: string }>(
+        'SELECT invite_to_org($1,$2,$3,$4,$5)',
+        [orgId, email, role, hashToken(token), 14],
+      );
+      return {
+        kind: 'created' as const,
+        id: created.rows[0]?.invite_to_org,
+        groupName,
+        invitedBy: inviter.rows[0]?.display_name ?? null,
+      };
+    });
+
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (result.value.kind === 'no-group') return c.json({ error: 'No such group.' }, 404);
+
+    // Sent after the row is committed, so a mail failure never leaves a live invitation
+    // nobody was told about — and never a token in an email with no row behind it.
+    const url = `${deps.webUrl}/join?token=${encodeURIComponent(token)}`;
+    await deps.mailer.send(
+      groupInvitationEmail(email, url, result.value.groupName, role, result.value.invitedBy),
+    );
+    return c.json({ id: result.value.id, email, role }, 201);
+  });
+
+  /** Withdraw one that has not been used. */
+  app.post('/api/organizations/:id/invitations/:inviteId/revoke', async (c) => {
+    const orgId = c.req.param('id');
+    const inviteId = c.req.param('inviteId');
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const updated = await client.query(
+        `UPDATE org_invitations SET revoked_at = now(), updated_at = now()
+          WHERE id = $1 AND org_id = $2 AND accepted_at IS NULL AND revoked_at IS NULL`,
+        [inviteId, orgId],
+      );
+      return { revoked: (updated.rowCount ?? 0) > 0 };
+    });
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    return c.json(result.value);
+  });
+
+  /** Accept one. The caller is whoever is signed in; the token proves they were asked. */
+  app.post('/api/invitations/accept', async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as { token?: unknown };
+    const token = typeof body.token === 'string' ? body.token : '';
+    if (token === '') return c.json({ error: 'No invitation token.' }, 400);
+
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const { rows } = await client.query<{ accept_org_invitation: string }>(
+        'SELECT accept_org_invitation($1)',
+        [hashToken(token)],
+      );
+      const orgId = rows[0]?.accept_org_invitation;
+      const org = await client.query<{ name: string; slug: string }>(
+        'SELECT name, slug FROM organizations WHERE id = $1',
+        [orgId],
+      );
+      return { orgId, name: org.rows[0]?.name ?? null };
+    });
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    return c.json(result.value);
+  });
 
   // --- rulesets -------------------------------------------------------------
 

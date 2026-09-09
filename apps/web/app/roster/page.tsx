@@ -343,7 +343,7 @@ export default function RosterPage() {
     );
   }
   // An event is a trip: a name and a year, with a roster inside it. It is the first thing a
-  // planner makes, so it is made here rather than somewhere it has nothing to do with.
+  // group admin makes, so it is made here rather than somewhere it has nothing to do with.
   const eventForm = (
     <div className="field">
       <div className="row">

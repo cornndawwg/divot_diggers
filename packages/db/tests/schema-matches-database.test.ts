@@ -66,8 +66,8 @@ afterAll(async () => {
 });
 
 describe('the Drizzle schema and the database', () => {
-  it('defines all 28 tables', () => {
-    expect(drizzleTables).toHaveLength(28);
+  it('defines all 29 tables', () => {
+    expect(drizzleTables).toHaveLength(29);
   });
 
   it('names the same domain tables the database has', async () => {
@@ -145,7 +145,7 @@ describe('the guarantees the migrations carry', () => {
     expect(rows[0]?.count).toBe('0');
   });
 
-  it('carries 69 policies, and accounts for every one', async () => {
+  it('carries 71 policies, and accounts for every one', async () => {
     const { rows } = await pool.query<{ count: string }>(
       "SELECT count(*) FROM pg_policies WHERE schemaname = 'public'",
     );
@@ -159,7 +159,8 @@ describe('the guarantees the migrations carry', () => {
     //         dogfight_result_update, dogfight_result_delete
     //   0011  read and write for the ten child tables the baseline left unprotected
     //   0013  cup teams, their membership and sessions, so the planner can set the cup up
-    expect(rows[0]?.count).toBe('69');
+    //   0018  read and write for group invitations, admins only
+    expect(rows[0]?.count).toBe('71');
   });
 
   it('protects a scored player from being deleted', async () => {

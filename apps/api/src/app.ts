@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Pool } from 'pg';
 import type { Auth } from './auth/auth.ts';
+import type { Mailer } from './mail/mailer.ts';
 import { plannerRoutes } from './planner/routes.ts';
 
 export interface AppOptions {
@@ -21,6 +22,8 @@ export interface AppOptions {
    */
   readonly domainPool: Pool;
   readonly webUrl: string;
+  /** Optional so a test app can be built without one; invitations need it. */
+  readonly mailer?: Mailer;
 }
 
 export interface PersonSummary {
@@ -37,7 +40,7 @@ export interface PersonSummary {
 }
 
 export function createApp(options: AppOptions): Hono {
-  const { auth, privilegedPool, domainPool, webUrl } = options;
+  const { auth, privilegedPool, domainPool, webUrl, mailer } = options;
   const app = new Hono();
 
   app.use(
@@ -55,7 +58,16 @@ export function createApp(options: AppOptions): Hono {
   // Better Auth owns every route under here: sign-up, sign-in, verification, reset.
   app.on(['GET', 'POST'], '/api/auth/*', (c) => auth.handler(c.req.raw));
 
-  app.route('/', plannerRoutes({ auth, privilegedPool, domainPool }));
+  app.route(
+    '/',
+    plannerRoutes({
+      auth,
+      privilegedPool,
+      domainPool,
+      webUrl,
+      ...(mailer === undefined ? {} : { mailer }),
+    }),
+  );
 
   app.get('/api/me', async (c) => {
     const session = await auth.api.getSession({ headers: c.req.raw.headers });

@@ -31,7 +31,7 @@ const auth = createAuth({
   mailer,
 });
 
-const app = createApp({ auth, privilegedPool, domainPool, webUrl: env.webUrl });
+const app = createApp({ auth, privilegedPool, domainPool, webUrl: env.webUrl, mailer });
 
 /**
  * Ask the database whether the domain connection can bypass row level security.

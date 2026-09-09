@@ -32,7 +32,7 @@ function RulesetEditor() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
 
-  // The hypothetical scorecard the planner plays with.
+  // The hypothetical scorecard the group admin plays with.
   const [strokes, setStrokes] = useState<number[]>([4, 4, 5, 5, 4, 3, 6, 5, 4]);
   const [startingTarget, setStartingTarget] = useState(36);
 
@@ -63,7 +63,7 @@ function RulesetEditor() {
   const targetValue = (competition?.['target'] ?? {}) as Record<string, unknown>;
 
   /**
-   * Validate with the very schema the server uses. The planner sees the same objection they
+   * Validate with the very schema the server uses. The group admin sees the same objection they
    * would get on save, while they are still typing, in words rather than as an error code.
    */
   const validation = useMemo(() => safeParseRuleset(draft), [draft]);

@@ -8,7 +8,7 @@ import { apiUrl } from '../../../lib/auth-client';
 /**
  * Scheduling a round, step by step.
  *
- * "Start round" used to do this in one click and explain none of it, which left planners with
+ * "Start round" used to do this in one click and explain none of it, which left group admins with
  * rounds attached to the wrong event and no idea a tee set or a hole selection had been picked
  * for them. Each decision is now visible, has a default, and says what it affects.
  */
@@ -129,7 +129,7 @@ function ScheduleRound() {
         : [];
 
       // Round ids come from the ruleset, and they are what says which competitions a round
-      // feeds. Offering them by name beats asking a planner to invent a key.
+      // feeds. Offering them by name beats asking a group admin to invent a key.
       const list = rulesets.ok
         ? ((await rulesets.json()) as { rulesets: { id: string }[] }).rulesets
         : [];
