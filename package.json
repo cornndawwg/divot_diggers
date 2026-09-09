@@ -34,7 +34,7 @@
     "build:web": "pnpm --filter @ddga/web build",
     "start:web": "pnpm --filter @ddga/web start",
     "start:api": "pnpm --filter @ddga/api start",
-    "release": "pnpm db:migrate:deploy"
+    "release": "pnpm db:migrate:deploy && pnpm db:provision-role"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",

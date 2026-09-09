@@ -22,29 +22,40 @@ The console proxies `/api/*` through to the API server-side, so there is one pub
 no CORS, and first-party session cookies. The API has **no public domain** — nothing outside
 the project can reach it.
 
-## Before the first deploy: prepare the database
+## The database looks after itself
 
-Run these from your machine, against the Railway database's **public** connection string
-(Railway calls it the "Public Network" URL on the Postgres service's Connect tab). They only
-need doing once.
+`pnpm release` runs on every deploy of the API service and does two things: applies pending
+migrations, then makes sure the non-owning role exists with the right grants. Railway's
+Postgres has no public endpoint by default, and it does not need one — this all happens from
+inside the project.
+
+Both steps are idempotent, so a redeploy is safe, and a migration that adds a table gets that
+table granted on the same deploy.
+
+The role and password come from `APP_DATABASE_URL` itself, so the string the API connects with
+and the role that gets created cannot drift apart. Generate the password once:
 
 ```bash
-DATABASE_URL='<railway public postgres url>' pnpm db:migrate:deploy
-
-DATABASE_URL='<railway public postgres url>' \
-APP_DATABASE_PASSWORD="$(openssl rand -hex 32)" \
-  pnpm db:provision-role
+openssl rand -hex 32
 ```
 
-The second one is not optional. **A Postgres table owner bypasses its own row level security**,
-so an API connecting as the owner has every tenancy policy in the schema switched off — one
-group could read another's data with nothing in the logs to say so. `db:provision-role`
-creates `ddga_app` as `NOSUPERUSER NOBYPASSRLS`, grants it what it needs, and refuses to
-report success if the role could still bypass RLS. The API declines to start in production
-without it.
+and set `APP_DATABASE_URL` to `DATABASE_URL` with the user and password swapped for
+`ddga_app` and that value.
 
-Keep the password you generated. `APP_DATABASE_URL` is the same connection string as
-`DATABASE_URL` with the user and password swapped for `ddga_app` and that password.
+### Why this matters more than it looks
+
+**A Postgres table owner bypasses its own row level security.** An API connecting as the owner
+has every tenancy policy in the schema switched off — one group can read another's data, and
+nothing in the logs, the tests or the console says a word.
+
+Setting `APP_DATABASE_URL` to the same value as `DATABASE_URL` therefore looks like it
+satisfies the requirement and in fact defeats it entirely. Two things now stop that:
+
+- `db:provision-role` refuses to run when `APP_DATABASE_URL` names the owning role, rather
+  than stripping the database's own superuser of its privileges.
+- The API asks Postgres, as the role that will actually run the queries, whether it is a
+  superuser, holds `BYPASSRLS`, or owns any tables. In production any of those refuses the
+  boot, naming which one.
 
 ## Service 1 — `web`
 

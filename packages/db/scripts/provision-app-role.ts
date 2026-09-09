@@ -2,8 +2,11 @@
 //
 //   pnpm db:provision-role
 //
-// Run once against a new database, after the migrations. Connects as the owner (DATABASE_URL)
-// and creates APP_DATABASE_ROLE with APP_DATABASE_PASSWORD.
+// Connects as the owner (DATABASE_URL). The role and password come from APP_DATABASE_URL —
+// the very string the API will connect with — so the two cannot drift apart. Set
+// APP_DATABASE_ROLE and APP_DATABASE_PASSWORD instead if you would rather be explicit.
+//
+// Safe and expected to run on every deploy; it is part of `pnpm release`.
 //
 // This exists because of invariant #5. A Postgres table owner bypasses its own row level
 // security, so an API connecting with the owning role has every policy in the schema quietly
@@ -13,22 +16,69 @@
 import { Pool } from 'pg';
 
 const url = process.env['DATABASE_URL'];
-const role = process.env['APP_DATABASE_ROLE'] ?? 'ddga_app';
-const password = process.env['APP_DATABASE_PASSWORD'];
+const appUrl = process.env['APP_DATABASE_URL'];
 
 if (url === undefined || url === '') {
   console.error('DATABASE_URL is not set. It must be the owning connection.');
   process.exit(1);
 }
+
+function credentialsFromAppUrl(): { role?: string; password?: string } {
+  if (appUrl === undefined || appUrl === '') return {};
+  try {
+    const parsed = new URL(appUrl);
+    return {
+      ...(parsed.username === '' ? {} : { role: decodeURIComponent(parsed.username) }),
+      ...(parsed.password === '' ? {} : { password: decodeURIComponent(parsed.password) }),
+    };
+  } catch {
+    console.error('APP_DATABASE_URL is not a valid connection string.');
+    process.exit(1);
+  }
+}
+
+const fromUrl = credentialsFromAppUrl();
+const role = process.env['APP_DATABASE_ROLE'] ?? fromUrl.role ?? 'ddga_app';
+const password = process.env['APP_DATABASE_PASSWORD'] ?? fromUrl.password;
+
 if (password === undefined || password === '') {
   console.error(
-    'APP_DATABASE_PASSWORD is not set. Generate one with: openssl rand -hex 32\n' +
-      'Then set APP_DATABASE_URL on the API to the same credentials.',
+    'No password for the app role. Either set APP_DATABASE_URL to the full connection\n' +
+      'string the API will use, or set APP_DATABASE_PASSWORD.\n' +
+      'Generate one with: openssl rand -hex 32',
   );
   process.exit(1);
 }
 if (!/^[a-z_][a-z0-9_]*$/.test(role)) {
-  console.error(`APP_DATABASE_ROLE "${role}" is not a plain identifier.`);
+  console.error(`The app role "${role}" is not a plain identifier.`);
+  process.exit(1);
+}
+
+/**
+ * Never touch the owning role.
+ *
+ * If APP_DATABASE_URL has been pointed at the same user as DATABASE_URL — which is an easy
+ * thing to do when something demands the variable be set — then stripping its privileges
+ * would take the database's own superuser down with it, and granting it anything is
+ * meaningless because it already owns everything. Say what is wrong instead.
+ */
+const ownerRole = (() => {
+  try {
+    return decodeURIComponent(new URL(url).username);
+  } catch {
+    return '';
+  }
+})();
+
+if (role === ownerRole) {
+  console.error(
+    `APP_DATABASE_URL connects as "${role}", which is the same role as DATABASE_URL.\n\n` +
+      'That is the role that owns the tables, and a table owner bypasses its own row level\n' +
+      'security — so every tenancy policy in the schema would be inert and one group could\n' +
+      "read another's data. Point APP_DATABASE_URL at a separate role, for example:\n\n" +
+      '  postgresql://ddga_app:<password>@<host>:<port>/<database>\n\n' +
+      'then run this again. Refusing to alter the owning role.',
+  );
   process.exit(1);
 }
 

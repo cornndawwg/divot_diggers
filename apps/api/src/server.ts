@@ -34,22 +34,54 @@ const auth = createAuth({
 const app = createApp({ auth, privilegedPool, domainPool, webUrl: env.webUrl });
 
 /**
- * In production, connecting domain queries as the owner is not a warning, it is a breach.
+ * Ask the database whether the domain connection can bypass row level security.
  *
- * A Postgres table owner bypasses its own row level security, so an API without a separate
- * non-owning role has every tenancy policy in the schema switched off — org A can read org
- * B, and nothing in the logs, the tests or the console says a word. On a developer's machine
- * that is a nuisance worth a warning. On a deployed server it is the whole of invariant #5,
- * so refuse to start instead.
+ * Checking that APP_DATABASE_URL is merely *set* is not enough, and assuming otherwise was a
+ * mistake: pointing it at the same credentials as DATABASE_URL satisfies that check and
+ * leaves every policy in the schema inert, because a Postgres table owner bypasses its own
+ * RLS. So ask Postgres directly, as the role that will actually run the queries.
+ *
+ * Any one of these three is enough to switch tenancy off entirely, with no error anywhere
+ * and no visible symptom until one group sees another's data.
  */
-if (process.env['NODE_ENV'] === 'production' && process.env['APP_DATABASE_URL'] === undefined) {
-  console.error(
-    '\nAPP_DATABASE_URL is not set.\n\n' +
-      'Domain queries would run as the database owner, which bypasses every row level\n' +
-      'security policy and lets one group read another\'s data. Create the non-owning role\n' +
-      'with `pnpm db:provision-role`, then set APP_DATABASE_URL to its connection string.\n',
+async function rlsBypassReasons(): Promise<string[]> {
+  const { rows } = await domainPool.query<{
+    role: string;
+    rolsuper: boolean;
+    rolbypassrls: boolean;
+    owned: string;
+  }>(
+    `SELECT current_user AS role, r.rolsuper, r.rolbypassrls,
+            (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relowner = r.oid)::text
+              AS owned
+       FROM pg_roles r WHERE r.rolname = current_user`,
   );
-  process.exit(1);
+  const row = rows[0];
+  if (row === undefined) return ['the database did not report who it is connected as'];
+
+  const reasons: string[] = [];
+  if (row.rolsuper) reasons.push(`"${row.role}" is a superuser`);
+  if (row.rolbypassrls) reasons.push(`"${row.role}" has the BYPASSRLS attribute`);
+  if (row.owned !== '0') reasons.push(`"${row.role}" owns ${row.owned} of the tables`);
+  return reasons;
+}
+
+const bypass = await rlsBypassReasons();
+if (bypass.length > 0) {
+  const message =
+    `Domain queries would bypass row level security: ${bypass.join(', ')}.\n\n` +
+    'Every tenancy policy in the schema would be inert, and one group could read\n' +
+    "another's data with nothing in the logs to say so.\n\n" +
+    'Create a separate non-owning role and point APP_DATABASE_URL at it:\n\n' +
+    '  APP_DATABASE_URL=postgresql://ddga_app:<password>@<host>:<port>/<database>\n' +
+    '  pnpm db:provision-role\n';
+
+  if (process.env['NODE_ENV'] === 'production') {
+    console.error(`\n${message}`);
+    process.exit(1);
+  }
+  console.warn(`\n  WARNING: ${message}`);
 }
 
 const port = Number(process.env['PORT'] ?? 8787);
