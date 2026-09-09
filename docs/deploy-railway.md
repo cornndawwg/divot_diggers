@@ -142,3 +142,44 @@ Creating the group and its first owner happens by signing up in the browser.
   no API is a confusing failure.
 - **`pnpm gate2` is the honest check** that a deployment's data is right. Run it after any
   seeding.
+
+## Driving Railway from a terminal
+
+The Railway CLI is installed but **CLI 4.5.5 does not accept a project token** — every command
+answers `Unauthorized. Please login with railway login`, and `railway login --browserless`
+needs an interactive terminal, which a remote dev box does not have.
+
+The GraphQL API takes the project token happily, so use that:
+
+```bash
+curl -s -X POST https://backboard.railway.com/graphql/v2 \
+  -H "Content-Type: application/json" \
+  -H "Project-Access-Token: $RAILWAY_TOKEN" \
+  -d '{"query":"query { projectToken { projectId environmentId } }"}'
+```
+
+Useful queries, all taking `projectId`, `environmentId` and `serviceId`:
+
+| Need | Field |
+|---|---|
+| services and their ids | `project(id:){ services{edges{node{id name}}} }` |
+| deployment status | `project(id:){ services{edges{node{deployments(first:3){edges{node{id status}}}}}} }` |
+| why a build failed | `buildLogs(deploymentId:, limit:)` |
+| why it crashed after building | `deploymentLogs(deploymentId:, limit:)` |
+| what is configured | `serviceInstance(serviceId:, environmentId:){ buildCommand startCommand }` |
+| variables | `variables(projectId:, environmentId:, serviceId:)` |
+| set one | `mutation($in:VariableUpsertInput!){ variableUpsert(input:$in) }` |
+| redeploy | `mutation($e:String!,$s:String!){ serviceInstanceRedeploy(environmentId:$e, serviceId:$s) }` |
+
+A service's own `RAILWAY_PRIVATE_DOMAIN` variable is the authoritative internal hostname —
+do not guess it from the service name.
+
+## Seeding a Railway database
+
+Postgres has no public endpoint, which is the right default and means the seed scripts cannot
+reach it from a laptop. Everything except the historical years can be done in the browser:
+sign up, create the group, publish the ruleset, import courses and the roster from CSV.
+
+For `history:seed` and `gate2`, either add a TCP proxy to the Postgres service temporarily
+(Settings → Networking → TCP Proxy, and remove it afterwards), or run them as a one-off
+change to the API service's start command.
