@@ -53,3 +53,4 @@ pnpm-debug.log*
 
 # drizzle-kit introspection output (regenerated on demand)
 .drizzle-introspect/
+.railway

@@ -145,11 +145,54 @@ Creating the group and its first owner happens by signing up in the browser.
 
 ## Driving Railway from a terminal
 
-The Railway CLI is installed but **CLI 4.5.5 does not accept a project token** — every command
-answers `Unauthorized. Please login with railway login`, and `railway login --browserless`
-needs an interactive terminal, which a remote dev box does not have.
+Use **CLI v5 or later**. Version 4.5.5 rejects a project token on every command with
+`Unauthorized`, which looks like a bad token and is not — it is the version. Update with:
 
-The GraphQL API takes the project token happily, so use that:
+```bash
+sudo npm install -g @railway/cli@latest
+```
+
+Link the repo once (`.railway/` is gitignored):
+
+```bash
+railway link --project <project-id> --environment production --service divot_diggers_API
+```
+
+### What a project token can do
+
+Set `RAILWAY_TOKEN` and these all work, with no account login:
+
+| Command | Use |
+|---|---|
+| `railway status` | project, environment, ids |
+| `railway variables --service <name>` | every variable, values shown in full |
+| `railway logs --service <name>` | runtime logs; `--build` for build logs |
+| `railway deployment list --service <name>` | history with statuses |
+| `railway redeploy --service <name>` | redeploy the latest |
+
+`railway whoami` and `railway list` are account-scoped and will refuse a project token. That is
+correct, not a fault.
+
+### What needs an account login
+
+`railway login --browserless` prints a URL and a pairing code. It refuses to run without a
+terminal, so on a remote box wrap it in a pty:
+
+```bash
+script -qfc "railway login --browserless" /dev/null
+```
+
+Account auth adds `railway ssh` and `railway connect`. Both also need a registered public key:
+
+```bash
+railway ssh keys add            # auto-detects ~/.ssh/*.pub
+railway ssh keys github         # or import the ones on your GitHub account
+```
+
+### Reading logs without the CLI at all
+
+The GraphQL API takes a project token directly, which is useful when the CLI is the thing
+being debugged:
 
 ```bash
 curl -s -X POST https://backboard.railway.com/graphql/v2 \
@@ -157,8 +200,6 @@ curl -s -X POST https://backboard.railway.com/graphql/v2 \
   -H "Project-Access-Token: $RAILWAY_TOKEN" \
   -d '{"query":"query { projectToken { projectId environmentId } }"}'
 ```
-
-Useful queries, all taking `projectId`, `environmentId` and `serviceId`:
 
 | Need | Field |
 |---|---|
@@ -180,6 +221,13 @@ Postgres has no public endpoint, which is the right default and means the seed s
 reach it from a laptop. Everything except the historical years can be done in the browser:
 sign up, create the group, publish the ruleset, import courses and the roster from CSV.
 
-For `history:seed` and `gate2`, either add a TCP proxy to the Postgres service temporarily
-(Settings → Networking → TCP Proxy, and remove it afterwards), or run them as a one-off
-change to the API service's start command.
+For `history:seed` and `gate2`, run them inside the API container, where
+`postgres.railway.internal` resolves and nothing is exposed to the internet:
+
+```bash
+railway ssh --service divot_diggers_API -- "pnpm history:seed divot-diggers 2025"
+railway ssh --service divot_diggers_API -- "pnpm gate2 divot-diggers"
+```
+
+That needs the SSH key registration above. Failing that, add a TCP proxy to the Postgres
+service temporarily (Settings → Networking → TCP Proxy) and remove it afterwards.
