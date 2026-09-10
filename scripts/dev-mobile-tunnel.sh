@@ -1,32 +1,37 @@
 #!/usr/bin/env bash
-# Serve the phone app through a Cloudflare tunnel, for a phone that is not on this network.
+# Serve the phone app at https://dev.cupweek.golf, for a phone that is not on this network.
 #
 #   pnpm dev:mobile:tunnel
 #
-# Expo's own --tunnel rides on an ngrok account it shares with every one of its users, and
-# fails outright when that is full (ERR_NGROK_108) with an error naming neither the cause nor
-# a fix. This uses Cloudflare's quick tunnels instead: no account, no token, nothing to
-# configure, and a fresh https address each run.
+# A named Cloudflare tunnel on a domain we own, rather than shared free infrastructure.
+# Expo's own --tunnel rides on an ngrok account it shares with every one of its users and
+# fails when that is full; Cloudflare's quick tunnels hand out a random name that, on a bad
+# day, never gets DNS at all. Both report success and then do not work. This one has a fixed
+# address, our DNS, and nobody else's capacity in the way.
 #
 # Ctrl+C stops both the tunnel and Metro.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 PORT="${PORT:-8081}"
+HOSTNAME_="${DEV_TUNNEL_HOSTNAME:-dev.cupweek.golf}"
+TUNNEL="${DEV_TUNNEL_NAME:-ddga-dev}"
 CF="$HOME/.local/bin/cloudflared"
 LOG="$(mktemp -t ddga-tunnel-XXXXXX.log)"
 
 if [ ! -x "$CF" ]; then
-  echo "cloudflared is not installed at $CF"
-  echo "Install it with:"
+  echo "cloudflared is not installed at $CF. Install it with:"
   echo "  mkdir -p ~/.local/bin && curl -sL -o ~/.local/bin/cloudflared \\"
   echo "    https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \\"
   echo "    && chmod +x ~/.local/bin/cloudflared"
   exit 1
 fi
-
+if [ ! -f "$HOME/.cloudflared/cert.pem" ]; then
+  echo "Not logged in to Cloudflare. Run:  cloudflared tunnel login"
+  exit 1
+fi
 if ss -ltn 2>/dev/null | grep -q ":${PORT} "; then
-  echo "Port ${PORT} is already in use — stop whatever is on it, or run: PORT=8090 pnpm dev:mobile:tunnel"
+  echo "Port ${PORT} is in use. Stop what is on it, or run: PORT=8090 pnpm dev:mobile:tunnel"
   exit 1
 fi
 
@@ -36,27 +41,24 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "Opening a Cloudflare tunnel to port ${PORT}…"
-"$CF" tunnel --url "http://localhost:${PORT}" --no-autoupdate > "$LOG" 2>&1 &
+echo "Opening the tunnel to https://${HOSTNAME_} …"
+"$CF" tunnel --no-autoupdate --url "http://localhost:${PORT}" run "$TUNNEL" > "$LOG" 2>&1 &
 CF_PID=$!
 
-URL=""
 for _ in $(seq 1 40); do
-  URL="$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$LOG" 2>/dev/null | head -1 || true)"
-  [ -n "$URL" ] && break
-  kill -0 "$CF_PID" 2>/dev/null || { echo "The tunnel exited. Last output:"; tail -5 "$LOG"; exit 1; }
+  grep -q "Registered tunnel connection" "$LOG" 2>/dev/null && break
+  kill -0 "$CF_PID" 2>/dev/null || { echo "The tunnel exited:"; tail -5 "$LOG"; exit 1; }
   sleep 1
 done
-
-if [ -z "$URL" ]; then
-  echo "No tunnel address after 40 seconds. Last output:"; tail -5 "$LOG"; exit 1
+if ! grep -q "Registered tunnel connection" "$LOG" 2>/dev/null; then
+  echo "The tunnel did not connect in 40 seconds:"; tail -5 "$LOG"; exit 1
 fi
 
-echo "Tunnel:  $URL"
+echo "Tunnel up.  https://${HOSTNAME_}"
 echo "Starting Metro. Scan the QR code with Expo Go."
 echo
 
-# Expo builds the manifest and bundle URLs from this, so the phone is told to fetch them
+# Metro builds the manifest and bundle URLs from this, so the phone is told to fetch them
 # through the tunnel rather than from an address only this network can reach.
-EXPO_PACKAGER_PROXY_URL="$URL" \
+EXPO_PACKAGER_PROXY_URL="https://${HOSTNAME_}" \
   pnpm --filter @ddga/mobile exec expo start --port "$PORT" --host localhost
