@@ -29,6 +29,7 @@ const auth = createAuth({
   baseUrl: env.publicUrl,
   webUrl: env.webUrl,
   mailer,
+  extraTrustedOrigins: env.extraTrustedOrigins,
 });
 
 const app = createApp({ auth, privilegedPool, domainPool, webUrl: env.webUrl, mailer });

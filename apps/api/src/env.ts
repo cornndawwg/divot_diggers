@@ -16,6 +16,13 @@ export interface ApiEnv {
   readonly mailgunApiKey: string;
   readonly mailgunDomain: string;
   readonly mailFrom: string;
+  /**
+   * Origins to trust besides the console's own.
+   *
+   * A group moving to its own domain has two live addresses for a while, and sign-in must
+   * keep working on both until the old one is retired. Comma separated.
+   */
+  readonly extraTrustedOrigins: readonly string[];
 }
 
 function required(name: string, hint: string): string {
@@ -47,5 +54,9 @@ export function loadEnv(): ApiEnv {
     mailgunApiKey: required('MAILGUN_API', 'The Mailgun private API key, from .env.'),
     mailgunDomain,
     mailFrom: optional('MAIL_FROM', `Divot Diggers <noreply@${mailgunDomain}>`),
+    extraTrustedOrigins: optional('EXTRA_TRUSTED_ORIGINS', '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter((origin) => origin !== ''),
   };
 }

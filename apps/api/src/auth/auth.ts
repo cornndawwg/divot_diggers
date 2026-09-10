@@ -19,10 +19,13 @@ export interface AuthOptions {
   readonly baseUrl: string;
   readonly webUrl: string;
   readonly mailer: Mailer;
+  /** Other origins the console is reachable on, e.g. the old address during a domain move. */
+  readonly extraTrustedOrigins?: readonly string[];
 }
 
 export function createAuth(options: AuthOptions) {
   const { pool, secret, baseUrl, webUrl, mailer } = options;
+  const extraOrigins = options.extraTrustedOrigins ?? [];
 
   return betterAuth({
     database: pool,
@@ -41,7 +44,7 @@ export function createAuth(options: AuthOptions) {
      * costs a browser nothing: a browser cannot set Origin to a custom scheme, so the check
      * that matters is unchanged. Any other origin is still refused, `null` included.
      */
-    trustedOrigins: [webUrl, `${MOBILE_SCHEME}://`],
+    trustedOrigins: [webUrl, `${MOBILE_SCHEME}://`, ...extraOrigins],
 
     /**
      * Let a client authenticate with `Authorization: Bearer <token>` as well as a cookie.
