@@ -33,7 +33,9 @@
     "build:web": "pnpm --filter @ddga/web build",
     "start:web": "pnpm --filter @ddga/web start",
     "start:api": "pnpm --filter @ddga/api start",
-    "release": "pnpm db:migrate && pnpm db:provision-role"
+    "release": "pnpm db:migrate && pnpm db:provision-role",
+    "dev:mobile": "pnpm --filter @ddga/mobile start:tunnel",
+    "dev:mobile:lan": "pnpm --filter @ddga/mobile start"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",
