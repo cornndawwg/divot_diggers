@@ -14,6 +14,13 @@ import * as SecureStore from 'expo-secure-store';
  */
 const TOKEN_KEY = 'ddga.session-token';
 
+/**
+ * React Native sends `Origin: null`, which the server refuses — a null origin is what a
+ * sandboxed page sends, and trusting it would weaken the same check for browsers. So say who
+ * we actually are. This matches `expo.scheme` in app.json and MOBILE_SCHEME on the server.
+ */
+const ORIGIN = 'divotdiggers://';
+
 function baseUrl(): string {
   const configured = Constants.expoConfig?.extra?.['apiUrl'];
   if (typeof configured === 'string' && configured !== '') return configured.replace(/\/$/, '');
@@ -51,6 +58,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = await storedToken();
   const headers = new Headers(init.headers);
   headers.set('content-type', 'application/json');
+  headers.set('origin', ORIGIN);
   if (token !== null) headers.set('authorization', `Bearer ${token}`);
 
   let response: Response;

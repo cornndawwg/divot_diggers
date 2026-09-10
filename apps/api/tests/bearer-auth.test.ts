@@ -135,6 +135,48 @@ describe('ADVERSARIAL: the token is not a weaker door', () => {
   });
 });
 
+describe('the Origin a phone sends', () => {
+  // React Native sends `Origin: null` unless told otherwise, and Better Auth refuses that —
+  // which is right, and which shipped as a sign-in screen that simply would not work. The
+  // fix is the app announcing its own scheme, not the server trusting null.
+  it('refuses a null origin, because that is what the check is for', async () => {
+    const response = await harness.request('/api/auth/sign-in/email', {
+      method: 'POST',
+      headers: { origin: 'null' },
+      body: JSON.stringify({ email: 'phone@example.com', password: PASSWORD }),
+    });
+    expect(response.status).toBe(403);
+  });
+
+  it('accepts the app scheme, and hands out a token', async () => {
+    const response = await harness.request('/api/auth/sign-in/email', {
+      method: 'POST',
+      headers: { origin: 'divotdiggers://' },
+      body: JSON.stringify({ email: 'phone@example.com', password: PASSWORD }),
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('set-auth-token')).not.toBe('');
+  });
+
+  it('still refuses somebody else\'s site', async () => {
+    const response = await harness.request('/api/auth/sign-in/email', {
+      method: 'POST',
+      headers: { origin: 'https://not-your-golf-trip.example' },
+      body: JSON.stringify({ email: 'phone@example.com', password: PASSWORD }),
+    });
+    expect(response.status).toBe(403);
+  });
+
+  it('and refuses a different custom scheme', async () => {
+    const response = await harness.request('/api/auth/sign-in/email', {
+      method: 'POST',
+      headers: { origin: 'someotherapp://' },
+      body: JSON.stringify({ email: 'phone@example.com', password: PASSWORD }),
+    });
+    expect(response.status).toBe(403);
+  });
+});
+
 describe('cookies still work', () => {
   it('because the console has not changed', async () => {
     await verifiedAccount('browser@example.com', 'A Browser User');

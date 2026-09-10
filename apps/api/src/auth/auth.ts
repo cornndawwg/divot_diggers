@@ -4,6 +4,9 @@ import type { Pool } from 'pg';
 import type { Mailer } from '../mail/mailer.ts';
 import { passwordResetEmail, verificationEmail } from '../mail/templates.ts';
 
+/** Matches `expo.scheme` in apps/mobile/app.json. The app sends it as its Origin. */
+export const MOBILE_SCHEME = 'divotdiggers';
+
 export interface AuthOptions {
   /**
    * A PRIVILEGED pool. Better Auth writes sessions and verification tokens before any
@@ -26,7 +29,19 @@ export function createAuth(options: AuthOptions) {
     secret,
     baseURL: baseUrl,
     basePath: '/api/auth',
-    trustedOrigins: [webUrl],
+    /**
+     * The console's origin, and the phone app's URL scheme.
+     *
+     * The origin check is CSRF protection: it stops a page on someone else's site making a
+     * request that rides on a browser's cookies. React Native sends `Origin: null`, which
+     * Better Auth refuses — correctly, because a null origin is what a sandboxed iframe or a
+     * file:// page sends, and trusting it would undo the protection for browsers too.
+     *
+     * So the app announces itself as `divotdiggers://` and that scheme is trusted here. This
+     * costs a browser nothing: a browser cannot set Origin to a custom scheme, so the check
+     * that matters is unchanged. Any other origin is still refused, `null` included.
+     */
+    trustedOrigins: [webUrl, `${MOBILE_SCHEME}://`],
 
     /**
      * Let a client authenticate with `Authorization: Bearer <token>` as well as a cookie.
@@ -88,6 +103,17 @@ export function createAuth(options: AuthOptions) {
     databaseHooks: {},
 
     advanced: {
+      /**
+       * Keep the origin check on under test.
+       *
+       * Better Auth switches it off by itself when it detects a test environment, which
+       * means every assertion about origins passes whether the code is right or wrong. That
+       * is how a sign-in screen shipped that no phone could use: the suite was structurally
+       * incapable of noticing. Saying so explicitly overrides the detection, so the tests
+       * exercise the same rules production does.
+       */
+      disableOriginCheck: false,
+
       // Cross-origin during development: the console runs on :3000, the API on :8787.
       defaultCookieAttributes: {
         sameSite: 'lax',

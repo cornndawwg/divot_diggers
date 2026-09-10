@@ -100,6 +100,10 @@ export async function createAuthHarness(name: string): Promise<AuthHarness> {
     async request(path, init = {}) {
       const { cookies, ...rest } = init;
       const headers = new Headers(rest.headers);
+      // A browser always sends an Origin, and the origin check is live in these tests, so
+      // the harness has to be as honest about that as a browser is. A test that cares about
+      // the origin sets its own and this leaves it alone.
+      if (!headers.has('origin')) headers.set('origin', WEB_URL);
       if (cookies !== undefined) headers.set('cookie', cookies);
       if (rest.body !== undefined && !headers.has('content-type')) {
         headers.set('content-type', 'application/json');
