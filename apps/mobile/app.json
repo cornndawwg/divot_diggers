@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Divot Diggers",
+    "slug": "divot-diggers",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "scheme": "divotdiggers",
+    "newArchEnabled": true,
+    "ios": { "supportsTablet": true, "bundleIdentifier": "com.divotdiggers.app" },
+    "android": { "package": "com.divotdiggers.app", "edgeToEdgeEnabled": true },
+    "extra": {
+      "apiUrl": "https://divotdiggersweb-production.up.railway.app"
+    }
+  }
+}

@@ -2,14 +2,25 @@
   "name": "@ddga/mobile",
   "version": "0.0.0",
   "private": true,
-  "type": "module",
-  "description": "Expo app.",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
-  "exports": {
-    ".": "./src/index.ts"
-  },
+  "description": "Expo app. The players' side: join a trip, enter scores, see where you stand.",
+  "main": "index.js",
   "scripts": {
+    "start": "expo start",
+    "start:tunnel": "expo start --tunnel",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "expo": "~57.0.21",
+    "expo-secure-store": "~57.0.3",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "expo-constants": "~57.0.17"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.18",
+    "typescript": "~5.9.3"
   }
 }

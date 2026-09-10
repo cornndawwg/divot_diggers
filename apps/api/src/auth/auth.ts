@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth';
+import { bearer } from 'better-auth/plugins/bearer';
 import type { Pool } from 'pg';
 import type { Mailer } from '../mail/mailer.ts';
 import { passwordResetEmail, verificationEmail } from '../mail/templates.ts';
@@ -26,6 +27,17 @@ export function createAuth(options: AuthOptions) {
     baseURL: baseUrl,
     basePath: '/api/auth',
     trustedOrigins: [webUrl],
+
+    /**
+     * Let a client authenticate with `Authorization: Bearer <token>` as well as a cookie.
+     *
+     * The console is a browser and uses cookies. A phone is not: React Native has no cookie
+     * jar worth relying on, and the session has to survive the app being killed and the phone
+     * being rebooted. The bearer plugin ships inside better-auth, so this costs no new
+     * dependency, and it changes nothing for the console — a cookie still works exactly as
+     * before, and a request carrying neither is still unauthenticated.
+     */
+    plugins: [bearer()],
 
     emailAndPassword: {
       enabled: true,
