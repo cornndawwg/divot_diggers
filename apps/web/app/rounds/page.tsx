@@ -26,6 +26,8 @@ interface Round {
   status: string;
   course: string | null;
   teeSet: string | null;
+  isPractice: boolean;
+  feedsNothing: boolean;
   holeSelection: { mode: string };
   resolved: Resolved | null;
 }
@@ -107,12 +109,28 @@ export default function RoundsPage() {
               <li key={round.id}>
                 <span>
                   {round.name}
+                  {round.isPractice && (
+                    <span className="meta"> · practice, does not count</span>
+                  )}
                   <br />
                   <span className="meta">
                     {round.course ?? 'No course'}
                     {round.teeSet !== null ? ` · ${round.teeSet}` : ''} ·{' '}
                     {SELECTION_LABEL[round.holeSelection.mode] ?? round.holeSelection.mode}
                   </span>
+                  {/*
+                    * A round feeding nothing and not marked practice is misconfigured, which
+                    * has happened before and scored nobody without saying so.
+                    */}
+                  {round.feedsNothing && (
+                    <>
+                      <br />
+                      <span className="check fail">
+                        This round feeds no competition, so nothing it scores will count. If
+                        that is deliberate, schedule it as a practice round.
+                      </span>
+                    </>
+                  )}
                 </span>
                 <span style={{ textAlign: 'right', flex: '0 0 auto' }}>
                   {round.resolved === null ? (

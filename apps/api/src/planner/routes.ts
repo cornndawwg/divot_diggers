@@ -1504,8 +1504,11 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
         groups: number;
         locked: number;
         scored: number;
+        is_practice: boolean;
+        feeds: number;
       }>(
-        `SELECT r.id, r.key, r.name, r.sequence, r.status, r.hole_selection,
+        `SELECT r.id, r.key, r.name, r.sequence, r.status, r.hole_selection, r.is_practice,
+                (SELECT count(*)::int FROM round_competitions rc WHERE rc.round_id = r.id) AS feeds,
                 -- A round is played on a day, not at an instant. Handing back a timestamp
                 -- lets a timezone shift it to the day before.
                 to_char(r.played_on, 'YYYY-MM-DD') AS played_on,
@@ -1536,6 +1539,10 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
           holeSelection: mode,
           holeCount:
             custom !== undefined && custom > 0 ? custom : mode === 'all' ? null : 9,
+          isPractice: row.is_practice,
+          // A round that feeds nothing and is not marked practice is misconfigured, and that
+          // has happened. Reporting both lets the screen tell them apart.
+          feedsNothing: !row.is_practice && row.feeds === 0,
           courseName: row.course_name,
           teeSet: row.tee_set,
           groups: row.groups,
@@ -2630,6 +2637,7 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
       courseId?: unknown;
       teeSetId?: unknown;
       key?: unknown;
+      isPractice?: unknown;
       name?: unknown;
       holeSelection?: unknown;
       playedOn?: unknown;
@@ -2641,6 +2649,8 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
     }
     const name =
       typeof body.name === 'string' && body.name.trim() !== '' ? body.name.trim() : 'Round';
+
+    const isPractice = body.isPractice === true;
 
     const selection = holeSelectionSchema.safeParse(body.holeSelection ?? { mode: 'all' });
     if (!selection.success) {
@@ -2680,17 +2690,19 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
       );
       const sequence = next.rows[0]?.next ?? 1;
 
-      // The key ties this round to a round id in the ruleset, which is what says which
-      // competitions it feeds. Without it a round is scored by nothing.
-      const key =
-        typeof body.key === 'string' && body.key.trim() !== ''
+      // A practice round is deliberately named something the ruleset does not, so the
+      // standings never see it. Letting the caller choose the key would let them pick one
+      // the ruleset *does* name, and the round would quietly start counting.
+      const key = isPractice
+        ? `practice-${sequence}`
+        : typeof body.key === 'string' && body.key.trim() !== ''
           ? body.key.trim()
           : `round-${sequence}`;
 
       const { rows } = await client.query<{ id: string; key: string }>(
         `INSERT INTO rounds (event_id, key, name, sequence, course_id, tee_set_id, hole_selection,
-                             played_on, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'scheduled')
+                             played_on, status, is_practice)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'scheduled',$9)
          RETURNING id, key`,
         [
           eventId,
@@ -2703,13 +2715,15 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
           typeof body.playedOn === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.playedOn)
             ? body.playedOn
             : null,
+          isPractice,
         ],
       );
       // Record what this round feeds. The ruleset decides: a cup session names the round it
       // is played on, and the individual competition takes every round that is not one. The
       // table has carried this in the schema from the start and nothing was writing it.
       const created = rows[0];
-      if (created !== undefined) {
+      // A practice round feeds nothing, which is the whole point of it.
+      if (created !== undefined && !isPractice) {
         const ruleset = await rulesetFor(client, eventId);
         for (const competition of ruleset?.competitions ?? []) {
           const feeds =

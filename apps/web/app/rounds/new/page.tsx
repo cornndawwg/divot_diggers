@@ -53,6 +53,7 @@ function ScheduleRound() {
   const [events, setEvents] = useState<EventSummary[]>([]);
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [rulesetRounds, setRulesetRounds] = useState<RulesetRound[]>([]);
+  const [isPractice, setIsPractice] = useState(false);
   const [state, setState] = useState<'loading' | 'ready' | 'signed-out' | 'blocked'>('loading');
   const [blocker, setBlocker] = useState('');
 
@@ -226,6 +227,7 @@ function ScheduleRound() {
         courseId,
         teeSetId,
         key: roundKey.trim(),
+        isPractice,
         name: name.trim() === '' ? roundKey.trim() : name.trim(),
         holeSelection: { mode: holeMode },
         ...(playedOn === '' ? {} : { playedOn }),
@@ -311,7 +313,28 @@ function ScheduleRound() {
           </p>
         </div>
 
-        {rulesetRounds.length > 0 ? (
+        <div className="field">
+          <label htmlFor="counts">Does this round count?</label>
+          <select
+            id="counts"
+            value={isPractice ? 'practice' : 'counts'}
+            onChange={(e) => {
+              const practice = e.target.value === 'practice';
+              setIsPractice(practice);
+              if (practice && name.trim() === '') setName('Practice round');
+            }}
+          >
+            <option value="counts">Yes — it scores towards a competition</option>
+            <option value="practice">No — practice round, just golf</option>
+          </select>
+          <p className="hint">
+            {isPractice
+              ? 'Nobody is scored and nothing moves: no points, no targets, no standings. Tee times still work, so you can send everyone out in groups.'
+              : 'Pick which round of the rules it is, below.'}
+          </p>
+        </div>
+
+        {isPractice ? null : rulesetRounds.length > 0 ? (
           <div className="field">
             <label htmlFor="key">Round</label>
             <select
@@ -340,7 +363,8 @@ function ScheduleRound() {
         ) : (
           <p className="check" style={{ color: '#8a6d00' }}>
             Every round in your rules already exists for this event. Add another round id on the{' '}
-            <Link href="/rulesets">Rules</Link> page, or delete an existing round.
+            <Link href="/rulesets">Rules</Link> page, delete an existing round, or schedule this
+            one as a practice round.
           </p>
         )}
 
@@ -500,7 +524,7 @@ function ScheduleRound() {
         <button
           type="button"
           onClick={() => void schedule()}
-          disabled={busy || rulesetRounds.length === 0}
+          disabled={busy || (!isPractice && rulesetRounds.length === 0)}
           style={{ marginTop: '0.9rem' }}
         >
           {busy ? 'Scheduling…' : 'Schedule this round'}

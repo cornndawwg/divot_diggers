@@ -432,6 +432,7 @@ export const rounds = pgTable("rounds", {
 	courseId: uuid("course_id"),
 	teeSetId: uuid("tee_set_id"),
 	holeSelection: jsonb("hole_selection").default({"mode":"all"}).notNull(),
+	isPractice: boolean("is_practice").default(false).notNull(),
 	status: text().default('scheduled').notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 	rowVersion: bigint("row_version", { mode: "number" }).default(sql`nextval('row_version_seq'::regclass)`).notNull(),
