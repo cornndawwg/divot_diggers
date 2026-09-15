@@ -126,7 +126,13 @@ Read the relevant one before implementing a subsystem. Do not infer the rules fr
 
 Do not build these, even if they seem natural:
 
-- Payment processing, money owed, or settlement of any kind. Handled off-app.
+- Payment *processing* — card handling, a gateway, moving money. Always off-app.
+  **Amended 2026-09-15:** recording *who has settled up* is now in scope, because a group
+  owner asked for it to stay organised rather than to move money. So the app may hold a cost
+  breakdown players can read, and let an owner or admin tick off who has paid the trip cost
+  and who has paid a wager. It holds no card details, calculates nobody's balance, and moves
+  nothing: it is a checklist with a note beside it, and settling still happens between
+  people.
 - A formula language or expression interpreter for rules. Use the strategy registry.
 - A social feed or forum. Planned, but much later.
 - Multi-region deployment.

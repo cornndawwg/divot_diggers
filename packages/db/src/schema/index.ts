@@ -225,6 +225,8 @@ export const events = pgTable("events", {
 	endDate: date("end_date"),
 	joinCode: text("join_code"),
 	joinCodeExpires: timestamp("join_code_expires", { withTimezone: true, mode: 'string' }),
+	welcomeNotes: text("welcome_notes"),
+	currency: text().default('USD').notNull(),
 	status: text().default('draft').notNull(),
 	rulesetId: uuid("ruleset_id"),
 	rulesetSnapshot: jsonb("ruleset_snapshot"),
@@ -842,4 +844,57 @@ export const orgInvitations = pgTable("org_invitations", {
 	unique("org_invitations_token_hash_key").on(table.tokenHash),
 	check("invitation_not_both_ways", sql`(accepted_at IS NULL) OR (revoked_at IS NULL)`),
 	check("org_invitations_role_check", sql`role = ANY (ARRAY['owner'::text, 'admin'::text, 'member'::text])`),
+]);
+
+export const eventCostItems = pgTable("event_cost_items", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	eventId: uuid("event_id").notNull(),
+	label: text().notNull(),
+	amount: integer(),
+	perPlayer: boolean("per_player").default(true).notNull(),
+	note: text(),
+	sequence: integer().default(0).notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	rowVersion: bigint("row_version", { mode: "number" }).default(sql`nextval('row_version_seq'::regclass)`).notNull(),
+}, (table) => [
+	index("event_cost_items_by_event").using("btree", table.eventId.asc().nullsLast().op("uuid_ops"), table.sequence.asc().nullsLast().op("int4_ops")),
+	foreignKey({
+			columns: [table.eventId],
+			foreignColumns: [events.id],
+			name: "event_cost_items_event_id_fkey"
+		}).onDelete("cascade"),
+]);
+
+export const eventPayments = pgTable("event_payments", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	eventId: uuid("event_id").notNull(),
+	personId: uuid("person_id").notNull(),
+	category: text().notNull(),
+	paid: boolean().default(false).notNull(),
+	note: text(),
+	markedBy: uuid("marked_by"),
+	markedAt: timestamp("marked_at", { withTimezone: true, mode: 'string' }),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	rowVersion: bigint("row_version", { mode: "number" }).default(sql`nextval('row_version_seq'::regclass)`).notNull(),
+}, (table) => [
+	index("event_payments_by_event").using("btree", table.eventId.asc().nullsLast().op("uuid_ops")),
+	foreignKey({
+			columns: [table.eventId],
+			foreignColumns: [events.id],
+			name: "event_payments_event_id_fkey"
+		}).onDelete("cascade"),
+	foreignKey({
+			columns: [table.personId],
+			foreignColumns: [people.id],
+			name: "event_payments_person_id_fkey"
+		}).onDelete("cascade"),
+	foreignKey({
+			columns: [table.markedBy],
+			foreignColumns: [people.id],
+			name: "event_payments_marked_by_fkey"
+		}).onDelete("set null"),
+	unique("event_payments_event_id_person_id_category_key").on(table.eventId, table.personId, table.category),
+	check("event_payments_category_check", sql`category = ANY (ARRAY['trip'::text, 'wager'::text, 'other'::text])`),
 ]);

@@ -791,6 +791,227 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
     return c.json(result.value);
   });
 
+  /**
+   * The trip as a player reads it: the notes, the cost breakdown, and — for whoever
+   * administers it — who has settled up.
+   */
+  app.get('/api/events/:id/trip', async (c) => {
+    const eventId = c.req.param('id');
+    const result = await asSignedIn(c.req.raw.headers, async (client, personId) => {
+      const event = await client.query<{
+        welcome_notes: string | null;
+        currency: string;
+        name: string;
+      }>('SELECT welcome_notes, currency, name FROM events WHERE id = $1', [eventId]);
+      const found = event.rows[0];
+      if (found === undefined) return { kind: 'missing' as const };
+
+      const mayEdit = await client.query<{ allowed: boolean }>(
+        'SELECT has_event_role($1, $2) AS allowed',
+        [eventId, 'planner'],
+      );
+      const isAdmin = mayEdit.rows[0]?.allowed === true;
+
+      const costs = await client.query<{
+        id: string;
+        label: string;
+        amount: number | null;
+        per_player: boolean;
+        note: string | null;
+      }>(
+        'SELECT id, label, amount, per_player, note FROM event_cost_items WHERE event_id = $1 ORDER BY sequence, label',
+        [eventId],
+      );
+
+      // RLS already limits a player to their own row, so this one query serves both.
+      const payments = await client.query<{
+        person_id: string;
+        display_name: string;
+        category: string;
+        paid: boolean;
+        note: string | null;
+        marked_at: string | null;
+      }>(
+        `SELECT pay.person_id, p.display_name, pay.category, pay.paid, pay.note, pay.marked_at
+           FROM event_payments pay JOIN people p ON p.id = pay.person_id
+          WHERE pay.event_id = $1
+          ORDER BY p.display_name, pay.category`,
+        [eventId],
+      );
+
+      // The roster, so an admin sees everybody rather than only those already ticked.
+      const roster = isAdmin
+        ? await client.query<{ person_id: string; display_name: string }>(
+            `SELECT ep.person_id, p.display_name FROM event_players ep
+               JOIN people p ON p.id = ep.person_id
+              WHERE ep.event_id = $1 ORDER BY p.display_name`,
+            [eventId],
+          )
+        : { rows: [] as { person_id: string; display_name: string }[] };
+
+      return {
+        kind: 'found' as const,
+        trip: {
+          eventName: found.name,
+          notes: found.welcome_notes,
+          currency: found.currency,
+          mayEdit: isAdmin,
+          youAre: personId,
+          costs: costs.rows.map((row) => ({
+            id: row.id,
+            label: row.label,
+            amount: row.amount,
+            perPlayer: row.per_player,
+            note: row.note,
+          })),
+          roster: roster.rows.map((row) => ({
+            personId: row.person_id,
+            displayName: row.display_name,
+          })),
+          payments: payments.rows.map((row) => ({
+            personId: row.person_id,
+            displayName: row.display_name,
+            category: row.category,
+            paid: row.paid,
+            note: row.note,
+            markedAt: row.marked_at,
+          })),
+        },
+      };
+    });
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (result.value.kind === 'missing') return c.json({ error: 'No such event.' }, 404);
+    return c.json(result.value.trip);
+  });
+
+  /** Write the trip notes. Everything a welcome packet used to say. */
+  app.post('/api/events/:id/trip/notes', async (c) => {
+    const eventId = c.req.param('id');
+    const body = (await c.req.json().catch(() => ({}))) as { notes?: unknown; currency?: unknown };
+    const notes = typeof body.notes === 'string' ? body.notes : null;
+    const currency =
+      typeof body.currency === 'string' && /^[A-Z]{3}$/.test(body.currency) ? body.currency : null;
+
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const updated = await client.query(
+        `UPDATE events SET welcome_notes = coalesce($2, welcome_notes),
+                           currency = coalesce($3, currency), updated_at = now()
+          WHERE id = $1`,
+        [eventId, notes, currency],
+      );
+      return { changed: (updated.rowCount ?? 0) > 0 };
+    });
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (!result.value.changed) return c.json({ error: 'You cannot edit this event.' }, 403);
+    return c.json(result.value);
+  });
+
+  /** Replace the cost breakdown. It is one list, so it is saved as one list. */
+  app.post('/api/events/:id/trip/costs', async (c) => {
+    const eventId = c.req.param('id');
+    const body = (await c.req.json().catch(() => ({}))) as { items?: unknown };
+    const items = Array.isArray(body.items) ? body.items : null;
+    if (items === null) return c.json({ error: 'Send a list of cost lines.' }, 400);
+
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const allowed = await client.query<{ allowed: boolean }>(
+        'SELECT has_event_role($1, $2) AS allowed',
+        [eventId, 'planner'],
+      );
+      if (allowed.rows[0]?.allowed !== true) return { kind: 'not-allowed' as const };
+
+      let sequence = 0;
+      await client.query('BEGIN');
+      try {
+        await client.query('DELETE FROM event_cost_items WHERE event_id = $1', [eventId]);
+        for (const raw of items) {
+          const row = raw as { label?: unknown; amount?: unknown; perPlayer?: unknown; note?: unknown };
+          const label = typeof row.label === 'string' ? row.label.trim() : '';
+          if (label === '') continue;
+          // Minor units only. A number with a fractional part is a caller sending dollars.
+          const amount =
+            typeof row.amount === 'number' && Number.isInteger(row.amount) ? row.amount : null;
+          await client.query(
+            `INSERT INTO event_cost_items (event_id, label, amount, per_player, note, sequence)
+             VALUES ($1,$2,$3,$4,$5,$6)`,
+            [
+              eventId,
+              label,
+              amount,
+              row.perPlayer !== false,
+              typeof row.note === 'string' && row.note.trim() !== '' ? row.note.trim() : null,
+              sequence,
+            ],
+          );
+          sequence += 1;
+        }
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      }
+      return { kind: 'saved' as const, lines: sequence };
+    });
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (result.value.kind === 'not-allowed') {
+      return c.json({ error: 'Only a group owner or group admin can set the costs.' }, 403);
+    }
+    return c.json({ lines: result.value.lines });
+  });
+
+  /**
+   * Tick somebody off, or un-tick them.
+   *
+   * A checklist and nothing more: no amount, no balance, no money moving. Who marked it and
+   * when are recorded, because "I told you I paid" is the argument this exists to settle.
+   */
+  app.post('/api/events/:id/trip/paid', async (c) => {
+    const eventId = c.req.param('id');
+    const body = (await c.req.json().catch(() => ({}))) as {
+      personId?: unknown;
+      category?: unknown;
+      paid?: unknown;
+      note?: unknown;
+    };
+    const targetPerson = typeof body.personId === 'string' ? body.personId : '';
+    const category = typeof body.category === 'string' ? body.category : 'trip';
+    if (targetPerson === '') return c.json({ error: 'Which player?' }, 400);
+    if (!['trip', 'wager', 'other'].includes(category)) {
+      return c.json({ error: 'That is not something to settle.' }, 400);
+    }
+
+    const result = await asSignedIn(c.req.raw.headers, async (client, personId) => {
+      const allowed = await client.query<{ allowed: boolean }>(
+        'SELECT has_event_role($1, $2) AS allowed',
+        [eventId, 'planner'],
+      );
+      if (allowed.rows[0]?.allowed !== true) return { kind: 'not-allowed' as const };
+
+      const paid = body.paid !== false;
+      await client.query(
+        `INSERT INTO event_payments (event_id, person_id, category, paid, note, marked_by, marked_at)
+         VALUES ($1,$2,$3,$4,$5,$6, now())
+         ON CONFLICT (event_id, person_id, category) DO UPDATE
+           SET paid = excluded.paid, note = excluded.note,
+               marked_by = excluded.marked_by, marked_at = now(), updated_at = now()`,
+        [
+          eventId,
+          targetPerson,
+          category,
+          paid,
+          typeof body.note === 'string' && body.note.trim() !== '' ? body.note.trim() : null,
+          personId,
+        ],
+      );
+      return { kind: 'saved' as const, paid };
+    });
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (result.value.kind === 'not-allowed') {
+      return c.json({ error: 'Only a group owner or group admin can mark this.' }, 403);
+    }
+    return c.json({ paid: result.value.paid });
+  });
+
   // --- inviting the roster --------------------------------------------------
 
   /**

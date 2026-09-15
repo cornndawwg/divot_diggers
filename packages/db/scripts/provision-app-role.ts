@@ -94,6 +94,8 @@ const DELETABLE = [
   'tee_group_members',
   'cup_teams',
   'cup_team_members',
+  'event_cost_items',
+  'event_payments',
 ];
 
 const pool = new Pool({ connectionString: url });
