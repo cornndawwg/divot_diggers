@@ -214,3 +214,70 @@ describe('ADVERSARIAL: the roster is not a way in', () => {
     expect(rows[0]?.auth_user_id).toBeNull();
   });
 });
+
+describe('an event has dates and can be edited', () => {
+  it('takes dates when it is created', async () => {
+    const created = await post(
+      '/api/events',
+      { name: 'DDD 2028', year: 2028, startDate: '2028-08-10', endDate: '2028-08-13' },
+      adminCookies,
+    );
+    const id = ((await created.json()) as { id: string }).id;
+
+    const detail = (await (
+      await harness.request(`/api/events/${id}/detail`, { cookies: adminCookies })
+    ).json()) as { startDate: string; endDate: string; name: string; mayEdit: boolean };
+
+    // Dates, not timestamps: a trip starts on a day, and a timezone must never shift it.
+    expect(detail.startDate).toBe('2028-08-10');
+    expect(detail.endDate).toBe('2028-08-13');
+    expect(detail.mayEdit).toBe(true);
+  });
+
+  it('refuses an event that ends before it starts', async () => {
+    const response = await post(
+      '/api/events',
+      { name: 'Backwards', year: 2029, startDate: '2029-08-13', endDate: '2029-08-10' },
+      adminCookies,
+    );
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as { error: string }).error).toMatch(/cannot end before/i);
+  });
+
+  it('lets an admin change the name and the dates afterwards', async () => {
+    const created = await post('/api/events', { name: 'Needs A Rename', year: 2030 }, adminCookies);
+    const id = ((await created.json()) as { id: string }).id;
+
+    await post(
+      `/api/events/${id}/detail`,
+      { name: 'Renamed Properly', startDate: '2030-09-01', endDate: '2030-09-04' },
+      adminCookies,
+    );
+
+    const detail = (await (
+      await harness.request(`/api/events/${id}/detail`, { cookies: adminCookies })
+    ).json()) as { name: string; startDate: string };
+    expect(detail.name).toBe('Renamed Properly');
+    expect(detail.startDate).toBe('2030-09-01');
+  });
+
+  it('reports what is still missing, so the page can say what to do next', async () => {
+    const detail = (await (
+      await harness.request(`/api/events/${eventId}/detail`, { cookies: adminCookies })
+    ).json()) as { playerCount: number; roundCount: number; courseCount: number };
+    expect(detail.playerCount).toBe(3);
+    expect(detail.roundCount).toBe(0);
+    expect(detail.courseCount).toBe(0);
+  });
+
+  it('will not let a player edit somebody else\'s event', async () => {
+    const levi = cookiesFrom(
+      await harness.request('/api/auth/sign-in/email', {
+        method: 'POST',
+        body: JSON.stringify({ email: 'levi@example.com', password: PASSWORD }),
+      }),
+    );
+    const response = await post(`/api/events/${eventId}/detail`, { name: 'Hijacked' }, levi);
+    expect(response.status).toBe(403);
+  });
+});

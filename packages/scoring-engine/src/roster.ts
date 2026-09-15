@@ -105,6 +105,14 @@ export interface RosterBalance {
   /** The stated goal: teams even in number. */
   readonly teamsEven: boolean;
   readonly perTeam: number;
+  /**
+   * The largest side any session needs — 2 for a pairs format, 1 for singles.
+   *
+   * A roster below twice this cannot field the cup at all, which is a different thing from
+   * a roster that merely contests fewer points than the ruleset declares, and deserves to be
+   * said differently.
+   */
+  readonly playersPerSideNeeded: number;
   /** How many players cannot be placed on an even team. 0 or 1. */
   readonly unplaced: number;
   readonly sessions: readonly SessionCapacity[];
@@ -196,6 +204,10 @@ export function rosterBalance(
     playerCount,
     teamsEven,
     perTeam,
+    playersPerSideNeeded: cup.sessions.reduce(
+      (most, session) => Math.max(most, session.playersPerSide),
+      1,
+    ),
     unplaced: playerCount % 2,
     sessions,
     pointsAvailable,

@@ -30,6 +30,7 @@ interface Balance {
   playerCount: number;
   teamsEven: boolean;
   perTeam: number;
+  playersPerSideNeeded: number;
   pointsAvailable: number;
   declaredPointsAvailable: number;
   clinchThreshold: number;
@@ -202,10 +203,38 @@ export default function CupPage() {
           </select>
         </div>
         {message !== '' && <p className="ok">{message}</p>}
-        {cup.balance.issues.length > 0 &&
-          cup.balance.issues.map((issue) => (
-            <p className="check fail" key={issue}>{issue}</p>
-          ))}
+        {/*
+          * These are facts about a roster that is usually half-built, not faults. Shown in
+          * red they read as "you have broken something" when the honest answer is "keep
+          * going" — so a roster too small to field the cup at all gets one plain sentence,
+          * and the arithmetic sits underneath for whoever wants it.
+          */}
+        {cup.balance.issues.length > 0 && (
+          <div style={{ marginTop: '0.6rem' }}>
+            {cup.balance.perTeam < cup.balance.playersPerSideNeeded ? (
+              <p className="meta">
+                {cup.balance.playerCount === 0
+                  ? 'Nobody on the roster yet. Add players and the cup fills in by itself.'
+                  : `${cup.balance.playerCount} player${cup.balance.playerCount === 1 ? '' : 's'} is not enough to field the cup — it needs at least ${cup.balance.playersPerSideNeeded * 2}. Keep adding and this sorts itself out.`}
+              </p>
+            ) : (
+              <p className="meta">
+                The cup follows the turnout rather than the rules document, so these differ
+                from what the ruleset declares:
+              </p>
+            )}
+            <details style={{ marginTop: '0.4rem' }}>
+              <summary className="meta" style={{ cursor: 'pointer' }}>
+                What the arithmetic says
+              </summary>
+              {cup.balance.issues.map((issue) => (
+                <p className="meta" key={issue} style={{ margin: '0.3rem 0 0' }}>
+                  {issue}
+                </p>
+              ))}
+            </details>
+          </div>
+        )}
       </div>
 
       <div className="split">

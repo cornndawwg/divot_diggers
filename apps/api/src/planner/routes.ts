@@ -398,10 +398,20 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
       organizationId?: unknown;
       name?: unknown;
       year?: unknown;
+      startDate?: unknown;
+      endDate?: unknown;
     };
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     const year = typeof body.year === 'number' ? body.year : new Date().getUTCFullYear();
     if (name === '') return c.json({ error: 'An event needs a name.' }, 400);
+
+    const asDate = (value: unknown): string | null =>
+      typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+    const startDate = asDate(body.startDate);
+    const endDate = asDate(body.endDate);
+    if (startDate !== null && endDate !== null && endDate < startDate) {
+      return c.json({ error: 'The event cannot end before it starts.' }, 400);
+    }
 
     const result = await asSignedIn(c.req.raw.headers, async (client) => {
       let orgId = typeof body.organizationId === 'string' ? body.organizationId : undefined;
@@ -419,6 +429,12 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
 
       // Point the event at the group's newest ruleset so scoring has config to read. The
       // snapshot is taken separately, when the event starts.
+      if (id !== null && (startDate !== null || endDate !== null)) {
+        await client.query(
+          'UPDATE events SET start_date = $2, end_date = $3, updated_at = now() WHERE id = $1',
+          [id, startDate, endDate],
+        );
+      }
       if (id !== null) {
         // Most recently published wins. Ordering by version alone breaks as soon as a group
         // has two different rulesets, because both start at version 1 and the choice
@@ -660,6 +676,118 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
       return { orgId, name: org.rows[0]?.name ?? null };
     });
     if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    return c.json(result.value);
+  });
+
+  // --- events ---------------------------------------------------------------
+
+  /** Everything the event page shows about one event. */
+  app.get('/api/events/:id/detail', async (c) => {
+    const eventId = c.req.param('id');
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const { rows } = await client.query<{
+        id: string;
+        org_id: string;
+        org_name: string;
+        name: string;
+        year: number;
+        start_date: string | null;
+        end_date: string | null;
+        status: string;
+        ruleset_name: string | null;
+        frozen: boolean;
+        players: string;
+        rounds: string;
+        courses: string;
+      }>(
+        `SELECT e.id, e.org_id, o.name AS org_name, e.name, e.year,
+                to_char(e.start_date, 'YYYY-MM-DD') AS start_date,
+                to_char(e.end_date, 'YYYY-MM-DD') AS end_date,
+                e.status,
+                r.name AS ruleset_name,
+                e.ruleset_snapshot IS NOT NULL AS frozen,
+                (SELECT count(*) FROM event_players ep WHERE ep.event_id = e.id)::text AS players,
+                (SELECT count(*) FROM rounds rd WHERE rd.event_id = e.id)::text AS rounds,
+                (SELECT count(DISTINCT rd.course_id) FROM rounds rd
+                  WHERE rd.event_id = e.id AND rd.course_id IS NOT NULL)::text AS courses
+           FROM events e
+           JOIN organizations o ON o.id = e.org_id
+           LEFT JOIN rulesets r ON r.id = e.ruleset_id
+          WHERE e.id = $1`,
+        [eventId],
+      );
+      const row = rows[0];
+      if (row === undefined) return { kind: 'missing' as const };
+
+      const mayEdit = await client.query<{ allowed: boolean }>(
+        'SELECT has_event_role($1, $2) AS allowed',
+        [eventId, 'planner'],
+      );
+
+      return {
+        kind: 'found' as const,
+        event: {
+          id: row.id,
+          orgId: row.org_id,
+          groupName: row.org_name,
+          name: row.name,
+          year: row.year,
+          startDate: row.start_date,
+          endDate: row.end_date,
+          status: row.status,
+          rulesetName: row.ruleset_name,
+          // Once rules are frozen onto an event they are what it scores by, for good.
+          rulesFrozen: row.frozen,
+          playerCount: Number(row.players),
+          roundCount: Number(row.rounds),
+          courseCount: Number(row.courses),
+          mayEdit: mayEdit.rows[0]?.allowed === true,
+        },
+      };
+    });
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (result.value.kind === 'missing') return c.json({ error: 'No such event.' }, 404);
+    return c.json(result.value.event);
+  });
+
+  /** Change the name, the year or the dates. */
+  app.post('/api/events/:id/detail', async (c) => {
+    const eventId = c.req.param('id');
+    const body = (await c.req.json().catch(() => ({}))) as {
+      name?: unknown;
+      year?: unknown;
+      startDate?: unknown;
+      endDate?: unknown;
+    };
+    const asDate = (value: unknown): string | null =>
+      typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+    const name = typeof body.name === 'string' ? body.name.trim() : null;
+    const year = typeof body.year === 'number' && Number.isInteger(body.year) ? body.year : null;
+    const startDate = asDate(body.startDate);
+    const endDate = asDate(body.endDate);
+
+    if (name !== null && name === '') return c.json({ error: 'An event needs a name.' }, 400);
+    if (startDate !== null && endDate !== null && endDate < startDate) {
+      return c.json({ error: 'The event cannot end before it starts.' }, 400);
+    }
+
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const updated = await client.query(
+        `UPDATE events
+            SET name = coalesce($2, name),
+                year = coalesce($3, year),
+                start_date = coalesce($4::date, start_date),
+                end_date = coalesce($5::date, end_date),
+                updated_at = now()
+          WHERE id = $1`,
+        [eventId, name, year, startDate, endDate],
+      );
+      return { changed: (updated.rowCount ?? 0) > 0 };
+    });
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (!result.value.changed) {
+      return c.json({ error: 'You do not have permission to change this event.' }, 403);
+    }
     return c.json(result.value);
   });
 
