@@ -37,6 +37,19 @@ export interface PersonSummary {
     readonly orgId: string;
     readonly roles: readonly string[];
   }[];
+  /**
+   * The groups this person belongs to, and what they do in each.
+   *
+   * Authority is group-wide since migration 0017, so event roles alone no longer describe
+   * what somebody can do — a Group Owner administers every event without holding a single
+   * event_roles row. Reporting only events asked the person who runs the group to type in a
+   * code from "whoever is running the group".
+   */
+  readonly groups: readonly {
+    readonly orgId: string;
+    readonly name: string;
+    readonly role: string;
+  }[];
 }
 
 export function createApp(options: AppOptions): Hono {
@@ -92,6 +105,15 @@ export function createApp(options: AppOptions): Hono {
     try {
       await client.query('SELECT set_config($1, $2, false)', ['app.person_id', found.id]);
 
+      const groups = await client.query<{ org_id: string; name: string; role: string }>(
+        `SELECT m.org_id, o.name, m.role
+           FROM org_members m
+           JOIN organizations o ON o.id = m.org_id
+          WHERE m.person_id = $1 AND m.removed_at IS NULL
+          ORDER BY o.name`,
+        [found.id],
+      );
+
       const roles = await client.query<{
         event_id: string;
         event_name: string;
@@ -123,6 +145,11 @@ export function createApp(options: AppOptions): Hono {
         displayName: found.display_name,
         email: found.email,
         events: [...byEvent.values()],
+        groups: groups.rows.map((row) => ({
+          orgId: row.org_id,
+          name: row.name,
+          role: row.role,
+        })),
       };
       return c.json(summary);
     } finally {

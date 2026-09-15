@@ -183,6 +183,12 @@ export function Join({ onJoined, onSignOut }: { onJoined: () => void; onSignOut:
   );
 }
 
+const GROUP_ROLE_LABELS: Record<string, string> = {
+  owner: 'Group Owner',
+  admin: 'Group Admin',
+  member: 'Member',
+};
+
 export function Home({ me, onSignOut }: { me: Me; onSignOut: () => void }) {
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.pad}>
@@ -190,12 +196,27 @@ export function Home({ me, onSignOut }: { me: Me; onSignOut: () => void }) {
       <Text style={s.lede}>
         You are in. Scoring arrives in the next build — this is the shell it hangs off.
       </Text>
+
+      {me.groups.map((group) => (
+        <View key={group.orgId} style={s.card}>
+          <Text style={s.cardTitle}>{group.name}</Text>
+          <Text style={s.meta}>{GROUP_ROLE_LABELS[group.role] ?? group.role}</Text>
+        </View>
+      ))}
+
       {me.events.map((event) => (
         <View key={event.eventId} style={s.card}>
           <Text style={s.cardTitle}>{event.eventName}</Text>
           <Text style={s.meta}>{event.roles.join(', ')}</Text>
         </View>
       ))}
+
+      {me.events.length === 0 && (
+        <Text style={s.meta}>
+          No trip yet. One will appear here once this year's event is set up.
+        </Text>
+      )}
+
       <Button label="Sign out" quiet onPress={onSignOut} />
     </ScrollView>
   );

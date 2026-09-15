@@ -94,6 +94,12 @@ export interface Me {
   displayName: string;
   email: string | null;
   events: { eventId: string; eventName: string; orgId: string; roles: string[] }[];
+  groups: { orgId: string; name: string; role: string }[];
+}
+
+/** Somebody who runs a group is never asked to join one with a code. */
+export function belongsSomewhere(me: Me): boolean {
+  return me.groups.length > 0 || me.events.length > 0;
 }
 
 export const api = {

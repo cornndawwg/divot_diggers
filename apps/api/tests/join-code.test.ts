@@ -159,6 +159,49 @@ describe('redeeming one', () => {
   });
 });
 
+describe('who is asked to join at all', () => {
+  // The app sends somebody to the join screen when they belong nowhere. Authority has been
+  // group-wide since 0017, so a Group Owner holds no event_roles row at all — and reporting
+  // only event roles asked the person running the group for a code from themselves.
+  it('reports the groups a person belongs to, not just their event roles', async () => {
+    const response = await harness.request('/api/me', { cookies: adminCookies });
+    const body = (await response.json()) as {
+      groups: { name: string; role: string }[];
+      events: unknown[];
+    };
+    expect(body.groups).toEqual([{ orgId: orgId, name: 'Divot Diggers', role: 'owner' }]);
+    // They also happen to hold a player role, because setting an event up puts you in it.
+    // The point is the group role, which is where the authority actually lives and which
+    // event roles would never have shown.
+    expect((body.events as { roles: string[] }[]).every((e) => !e.roles.includes('planner'))).toBe(
+      true,
+    );
+  });
+
+  it('reports nothing for somebody who has only just signed up', async () => {
+    const cookies = await signUp('brand-new@example.com', 'Brand New');
+    const body = (await (await harness.request('/api/me', { cookies })).json()) as {
+      groups: unknown[];
+      events: unknown[];
+    };
+    expect(body.groups).toEqual([]);
+    expect(body.events).toEqual([]);
+  });
+
+  it('and reports the group once they redeem a code', async () => {
+    const code = await issueCode();
+    const cookies = await signUp('joined@example.com', 'Newly Joined');
+    await post('/api/join', { code }, cookies);
+
+    const body = (await (await harness.request('/api/me', { cookies })).json()) as {
+      groups: { name: string; role: string }[];
+      events: { roles: string[] }[];
+    };
+    expect(body.groups).toEqual([{ orgId: orgId, name: 'Divot Diggers', role: 'member' }]);
+    expect(body.events[0]?.roles).toEqual(['player']);
+  });
+});
+
 describe('when it should not work', () => {
   it('refuses a code that has expired', async () => {
     const code = await issueCode();

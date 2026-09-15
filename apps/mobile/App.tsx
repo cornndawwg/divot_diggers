@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { api, forgetToken, storedToken, type Me } from './src/api';
+import { api, belongsSomewhere, forgetToken, storedToken, type Me } from './src/api';
 import { Home, Join, SignIn } from './src/screens';
 import { theme } from './src/theme';
 
@@ -15,7 +15,7 @@ import { theme } from './src/theme';
 type State =
   | { kind: 'starting' }
   | { kind: 'signed-out' }
-  | { kind: 'no-event'; me: Me }
+  | { kind: 'no-group'; me: Me }
   | { kind: 'ready'; me: Me };
 
 export default function App() {
@@ -28,7 +28,9 @@ export default function App() {
     }
     try {
       const me = await api.me();
-      setState(me.events.length === 0 ? { kind: 'no-event', me } : { kind: 'ready', me });
+      // Belonging to a group is enough. Asking a Group Owner for a code from "whoever is
+      // running the group" is asking them for a code from themselves.
+      setState(belongsSomewhere(me) ? { kind: 'ready', me } : { kind: 'no-group', me });
     } catch {
       // A token the server no longer accepts is worth nothing; start again rather than
       // leaving somebody stuck on a screen that cannot load.
@@ -55,7 +57,7 @@ export default function App() {
         </View>
       ) : state.kind === 'signed-out' ? (
         <SignIn onSignedIn={() => void refresh()} />
-      ) : state.kind === 'no-event' ? (
+      ) : state.kind === 'no-group' ? (
         <Join onJoined={() => void refresh()} onSignOut={() => void signOut()} />
       ) : (
         <Home me={state.me} onSignOut={() => void signOut()} />
