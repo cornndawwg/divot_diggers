@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import type { Pool, PoolClient } from 'pg';
 import {
   courseDocumentSchema,
@@ -35,7 +36,7 @@ import {
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { computeStandings, rebuildResults } from '../scoring/standings.ts';
 import type { Mailer } from '../mail/mailer.ts';
-import { groupInvitationEmail } from '../mail/templates.ts';
+import { groupInvitationEmail, rosterInvitationEmail } from '../mail/templates.ts';
 import { ensureTeams, readCupSetup, suggestTeams } from '../cup/setup.ts';
 import {
   arrangeMatchPlay,
@@ -661,6 +662,110 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
     if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
     return c.json(result.value);
   });
+
+  // --- inviting the roster --------------------------------------------------
+
+  /**
+   * Tell rostered players the app exists.
+   *
+   * Being on the roster already makes somebody a member of the group, and signing up with
+   * the address on their roster entry claims the person record the admin created — so there
+   * is nothing to grant here and no token to carry. All this does is send the email, which
+   * is the only part that was missing.
+   *
+   * Without a `personId` it invites everyone on the roster who has an address. With one it
+   * invites that player alone.
+   */
+  async function inviteRoster(c: Context, eventId: string, onlyPersonId: string | null) {
+    if (deps.mailer === undefined) {
+      return c.json({ error: 'Email is not configured, so invitations cannot be sent.' }, 503);
+    }
+
+    const result = await asSignedIn(c.req.raw.headers, async (client, personId) => {
+      const event = await client.query<{ name: string; org: string }>(
+        `SELECT e.name, o.name AS org FROM events e JOIN organizations o ON o.id = e.org_id
+          WHERE e.id = $1`,
+        [eventId],
+      );
+      const found = event.rows[0];
+      if (found === undefined) return { kind: 'no-event' as const };
+
+      // Only somebody who administers the event may do this — it sends mail in the group's
+      // name, to addresses the group holds.
+      const allowed = await client.query<{ allowed: boolean }>(
+        'SELECT has_event_role($1, $2) AS allowed',
+        [eventId, 'planner'],
+      );
+      if (allowed.rows[0]?.allowed !== true) return { kind: 'not-allowed' as const };
+
+      const inviter = await client.query<{ display_name: string }>(
+        'SELECT display_name FROM people WHERE id = $1',
+        [personId],
+      );
+
+      const players = await client.query<{
+        person_id: string;
+        display_name: string;
+        email: string | null;
+        has_account: boolean;
+      }>(
+        `SELECT ep.person_id, p.display_name, p.email, p.auth_user_id IS NOT NULL AS has_account
+           FROM event_players ep JOIN people p ON p.id = ep.person_id
+          WHERE ep.event_id = $1 AND ($2::uuid IS NULL OR ep.person_id = $2)
+          ORDER BY p.display_name`,
+        [eventId, onlyPersonId],
+      );
+
+      return {
+        kind: 'ready' as const,
+        eventName: found.name,
+        groupName: found.org,
+        invitedBy: inviter.rows[0]?.display_name ?? null,
+        players: players.rows,
+      };
+    });
+
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (result.value.kind === 'no-event') return c.json({ error: 'No such event.' }, 404);
+    if (result.value.kind === 'not-allowed') {
+      return c.json({ error: 'Only a group owner or group admin can invite the roster.' }, 403);
+    }
+
+    const { eventName, groupName, invitedBy, players } = result.value;
+    const sent: string[] = [];
+    const withoutEmail: string[] = [];
+
+    for (const player of players) {
+      if (player.email === null || player.email === '') {
+        withoutEmail.push(player.display_name);
+        continue;
+      }
+      const target = player.has_account
+        ? `${deps.webUrl}/sign-in`
+        : `${deps.webUrl}/sign-up?email=${encodeURIComponent(player.email)}`;
+      await deps.mailer.send(
+        rosterInvitationEmail(
+          player.email,
+          target,
+          groupName,
+          eventName,
+          invitedBy,
+          player.has_account,
+        ),
+      );
+      sent.push(player.display_name);
+    }
+
+    // Named, not counted: an admin needs to know who to chase for an address.
+    return c.json({ sent, withoutEmail });
+  }
+
+  app.post('/api/events/:id/roster/invite', async (c) =>
+    inviteRoster(c, c.req.param('id'), null),
+  );
+  app.post('/api/events/:id/roster/invite/:personId', async (c) =>
+    inviteRoster(c, c.req.param('id'), c.req.param('personId')),
+  );
 
   // --- join codes -----------------------------------------------------------
 

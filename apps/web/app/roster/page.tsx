@@ -56,6 +56,11 @@ export default function RosterPage() {
   }>({ code: null, expiresAt: null, expired: false });
   const [codeBusy, setCodeBusy] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteResult, setInviteResult] = useState<{
+    sent: string[];
+    withoutEmail: string[];
+  } | null>(null);
   const [events, setEvents] = useState<{ id: string; name: string; year: number }[]>([]);
   const [newEventName, setNewEventName] = useState('');
   const [newEventYear, setNewEventYear] = useState(String(new Date().getFullYear()));
@@ -342,6 +347,22 @@ export default function RosterPage() {
     });
     setMessage(`${person.displayName} is back, with their rating history.`);
     await load(eventId);
+  }
+
+  async function inviteRoster(personId?: string) {
+    setInviteBusy(true);
+    setInviteResult(null);
+    const path =
+      personId === undefined
+        ? `${apiUrl}/api/events/${eventId}/roster/invite`
+        : `${apiUrl}/api/events/${eventId}/roster/invite/${personId}`;
+    const response = await fetch(path, { method: 'POST', credentials: 'include' });
+    setInviteBusy(false);
+    if (!response.ok) {
+      setInviteResult({ sent: [], withoutEmail: [] });
+      return;
+    }
+    setInviteResult((await response.json()) as { sent: string[]; withoutEmail: string[] });
   }
 
   async function issueJoinCode() {
@@ -704,6 +725,37 @@ export default function RosterPage() {
           )}
         </div>
       )}
+
+      <div className="card" style={{ marginTop: '1rem' }}>
+        <h2 className="section">Invite the roster to the app</h2>
+        <p className="hint" style={{ marginTop: 0 }}>
+          Sends each player an email with a link. They set a password with the address you
+          have for them and land straight in this group — no code to read out, nothing to
+          type in. Somebody who already has an account is sent to sign in instead.
+        </p>
+        <button type="button" onClick={() => void inviteRoster()} disabled={inviteBusy || eventId === ''}>
+          {inviteBusy ? 'Sending…' : 'Invite everyone on the roster'}
+        </button>
+        {inviteResult !== null && (
+          <div style={{ marginTop: '0.7rem' }}>
+            {inviteResult.sent.length > 0 && (
+              <p className="meta">
+                Emailed {inviteResult.sent.length}{' '}
+                {inviteResult.sent.length === 1 ? 'player' : 'players'}.
+              </p>
+            )}
+            {inviteResult.withoutEmail.length > 0 && (
+              <p className="meta">
+                No address for {inviteResult.withoutEmail.join(', ')} — add one and invite
+                again.
+              </p>
+            )}
+            {inviteResult.sent.length === 0 && inviteResult.withoutEmail.length === 0 && (
+              <p className="meta">Nothing sent.</p>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="card" style={{ marginTop: '1rem' }}>
         <h2 className="section">Let players join themselves</h2>

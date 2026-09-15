@@ -1,12 +1,21 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { authClient } from '../../lib/auth-client';
 
-export default function SignUpPage() {
+/**
+ * The address arrives in the link when somebody was invited from a roster.
+ *
+ * It has to be the address the admin holds, because that is what claims the person record
+ * already carrying their history and their target. Prefilling it removes the one step where
+ * a typo quietly creates a second, empty account instead.
+ */
+function SignUpForm() {
+  const invitedEmail = useSearchParams().get('email') ?? '';
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(invitedEmail);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
@@ -66,5 +75,13 @@ export default function SignUpPage() {
         </p>
       </form>
     </>
+  );
+}
+
+export default function SignUpPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignUpForm />
+    </Suspense>
   );
 }

@@ -81,3 +81,37 @@ export function groupInvitationEmail(
     ),
   };
 }
+
+
+/**
+ * "You are on the roster — here is the app."
+ *
+ * Deliberately not a token link. Being on the roster already makes somebody a member of the
+ * group, and the address is proved at verification, so the only thing this has to do is tell
+ * them where to go and with which address. No code to read out, no step where an unfamiliar
+ * word decides whether it works.
+ */
+export function rosterInvitationEmail(
+  to: string,
+  url: string,
+  groupName: string,
+  eventName: string,
+  invitedBy: string | null,
+  hasAccount: boolean,
+): OutboundEmail {
+  const from = invitedBy === null ? '' : ` by ${invitedBy}`;
+  const opening = `You have been added${from} to the roster for ${eventName}.`;
+  const next = hasAccount
+    ? 'Sign in with this address and you will see it.'
+    : `Set a password using this address (${to}) and you are in.`;
+
+  return {
+    to,
+    subject: `You are on the roster for ${eventName}`,
+    text: `${opening}\n\n${next}\n\n${url}\n\nAny trouble, reply to whoever runs ${groupName}.`,
+    html: layout(`You are on the roster for ${eventName}`, `${opening} ${next}`, {
+      label: hasAccount ? 'Sign in' : 'Set your password',
+      url,
+    }),
+  };
+}

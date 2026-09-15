@@ -189,34 +189,62 @@ const GROUP_ROLE_LABELS: Record<string, string> = {
   member: 'Member',
 };
 
+/**
+ * One group and you are simply in it. Several and you pick, because somebody who plays with
+ * two groups should not have to work out which one the app decided to show them.
+ */
 export function Home({ me, onSignOut }: { me: Me; onSignOut: () => void }) {
+  const [openGroupId, setOpenGroupId] = useState<string | null>(
+    me.groups.length === 1 ? (me.groups[0]?.orgId ?? null) : null,
+  );
+  const group = me.groups.find((entry) => entry.orgId === openGroupId) ?? null;
+
+  if (group === null) {
+    return (
+      <ScrollView style={s.screen} contentContainerStyle={s.pad}>
+        <Text style={s.title}>Your groups</Text>
+        <Text style={s.lede}>Which one are you looking at?</Text>
+        {me.groups.map((entry) => (
+          <Pressable
+            key={entry.orgId}
+            accessibilityRole="button"
+            onPress={() => setOpenGroupId(entry.orgId)}
+            style={({ pressed }) => [s.card, pressed && { backgroundColor: theme.ground }]}
+          >
+            <Text style={s.cardTitle}>{entry.name}</Text>
+            <Text style={s.meta}>{GROUP_ROLE_LABELS[entry.role] ?? entry.role}</Text>
+          </Pressable>
+        ))}
+        <Button label="Sign out" quiet onPress={onSignOut} />
+      </ScrollView>
+    );
+  }
+
+  const events = me.events.filter((event) => event.orgId === group.orgId);
+
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.pad}>
-      <Text style={s.title}>{me.displayName}</Text>
+      <Text style={s.title}>{group.name}</Text>
       <Text style={s.lede}>
-        You are in. Scoring arrives in the next build — this is the shell it hangs off.
+        {me.displayName} — {GROUP_ROLE_LABELS[group.role] ?? group.role}
       </Text>
 
-      {me.groups.map((group) => (
-        <View key={group.orgId} style={s.card}>
-          <Text style={s.cardTitle}>{group.name}</Text>
-          <Text style={s.meta}>{GROUP_ROLE_LABELS[group.role] ?? group.role}</Text>
-        </View>
-      ))}
-
-      {me.events.map((event) => (
+      {events.map((event) => (
         <View key={event.eventId} style={s.card}>
           <Text style={s.cardTitle}>{event.eventName}</Text>
           <Text style={s.meta}>{event.roles.join(', ')}</Text>
         </View>
       ))}
 
-      {me.events.length === 0 && (
+      {events.length === 0 && (
         <Text style={s.meta}>
           No trip yet. One will appear here once this year's event is set up.
         </Text>
       )}
 
+      {me.groups.length > 1 && (
+        <Button label="Switch group" quiet onPress={() => setOpenGroupId(null)} />
+      )}
       <Button label="Sign out" quiet onPress={onSignOut} />
     </ScrollView>
   );
