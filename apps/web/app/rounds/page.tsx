@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { apiUrl } from '../../lib/auth-client';
+import { useCurrentEvent } from '../../lib/current-event';
 
 interface Hole {
   holeNumber: number;
@@ -43,26 +44,28 @@ const SELECTION_LABEL: Record<string, string> = {
 export default function RoundsPage() {
   const [rounds, setRounds] = useState<Round[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'signed-out'>('loading');
+  const { eventId, event } = useCurrentEvent();
 
   const load = useCallback(async () => {
-    const events = await fetch(`${apiUrl}/api/events`, { credentials: 'include' });
-    if (events.status === 401) {
+    if (eventId === '') {
+      setRounds([]);
+      setState('ready');
+      return;
+    }
+
+    // One event's rounds. This used to merge every event's together, which is why a round
+    // looked as though it belonged to nothing in particular.
+    const detail = await fetch(`${apiUrl}/api/events/${eventId}/rounds`, {
+      credentials: 'include',
+    });
+    if (detail.status === 401) {
       setState('signed-out');
       return;
     }
-    const body = (await events.json()) as { events: { id: string }[] };
-
-    // The rounds list comes from the event; each round is then resolved by the API so the
-    // hole count and par total shown here are the round's own, not the card's.
     const ids: string[] = [];
-    for (const event of body.events) {
-      const detail = await fetch(`${apiUrl}/api/events/${event.id}/rounds`, {
-        credentials: 'include',
-      });
-      if (detail.ok) {
-        const rows = (await detail.json()) as { rounds: { id: string }[] };
-        ids.push(...rows.rounds.map((round) => round.id));
-      }
+    if (detail.ok) {
+      const rows = (await detail.json()) as { rounds: { id: string }[] };
+      ids.push(...rows.rounds.map((round) => round.id));
     }
 
     const loaded = await Promise.all(
@@ -73,7 +76,7 @@ export default function RoundsPage() {
     );
     setRounds(loaded.filter((round): round is Round => round !== null));
     setState('ready');
-  }, []);
+  }, [eventId]);
 
   useEffect(() => {
     void load();
@@ -96,6 +99,9 @@ export default function RoundsPage() {
   return (
     <>
       <h1>Rounds</h1>
+      <p className="hint">
+        {event === null ? 'No event selected.' : `The rounds of ${event.name}.`}
+      </p>
       <p className="sub">{rounds.length === 0 ? 'None yet.' : `${rounds.length} scheduled.`}</p>
 
       <div className="card">

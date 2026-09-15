@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { apiUrl } from '../../lib/auth-client';
+import { useCurrentEvent } from '../../lib/current-event';
 import { parseRoster, type RosterRow } from '../../lib/csv';
 import { SAMPLE_ROSTER_CSV, downloadCsv } from '../../lib/samples';
 
@@ -48,7 +49,7 @@ const SOURCE_LABEL: Record<string, string> = {
 };
 
 export default function RosterPage() {
-  const [eventId, setEventId] = useState('');
+  const { eventId } = useCurrentEvent();
   const [joinCode, setJoinCode] = useState<{
     code: string | null;
     expiresAt: string | null;
@@ -61,7 +62,6 @@ export default function RosterPage() {
     sent: string[];
     withoutEmail: string[];
   } | null>(null);
-  const [events, setEvents] = useState<{ id: string; name: string; year: number }[]>([]);
   const [newEventName, setNewEventName] = useState('');
   const [newEventYear, setNewEventYear] = useState(String(new Date().getFullYear()));
   const [creatingEvent, setCreatingEvent] = useState(false);
@@ -105,13 +105,12 @@ export default function RosterPage() {
     const loaded = ((await eventsResponse.json()) as {
       events: { id: string; name: string; year: number }[];
     }).events;
-    setEvents(loaded);
     if (loaded.length === 0) {
       setState('no-event');
       return;
     }
-    const active = id ?? loaded[0]?.id ?? '';
-    setEventId(active);
+    const active = id ?? eventId;
+    if (active === '') return;
     void fetch(`${apiUrl}/api/events/${active}/join-code`, { credentials: 'include' })
       .then(async (response) =>
         response.ok
@@ -134,7 +133,7 @@ export default function RosterPage() {
     setRoster(((await rosterResponse.json()) as { players: RosterPlayer[] }).players);
     setBalance(balanceResponse.ok ? ((await balanceResponse.json()) as Balance) : null);
     setState('ready');
-  }, []);
+  }, [eventId]);
 
   useEffect(() => {
     void load();
@@ -478,23 +477,6 @@ export default function RosterPage() {
       )}
 
       <div className="card" style={{ marginBottom: '1rem' }}>
-        <div className="field">
-          <label htmlFor="event">Event</label>
-          <select
-            id="event"
-            value={eventId}
-            onChange={(changed) => {
-              setState('loading');
-              void load(changed.target.value);
-            }}
-          >
-            {events.map((event) => (
-              <option key={event.id} value={event.id}>
-                {event.name} ({event.year})
-              </option>
-            ))}
-          </select>
-        </div>
         <details>
           <summary className="hint" style={{ cursor: 'pointer' }}>
             Add another event

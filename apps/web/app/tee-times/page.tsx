@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { apiUrl } from '../../lib/auth-client';
+import { useCurrentEvent } from '../../lib/current-event';
 
 interface RoundRef {
   id: string;
@@ -63,8 +64,7 @@ const PAIRINGS = [
 const SIDE_COLOURS = ['#1d4ed8', '#b91c1c'];
 
 export default function TeeTimesPage() {
-  const [events, setEvents] = useState<{ id: string; name: string; year: number }[]>([]);
-  const [eventId, setEventId] = useState('');
+  const { eventId } = useCurrentEvent();
   const [rounds, setRounds] = useState<RoundRef[]>([]);
   const [roundId, setRoundId] = useState('');
   const [groups, setGroups] = useState<Group[]>([]);
@@ -115,13 +115,12 @@ export default function TeeTimesPage() {
       const loaded = ((await eventsResponse.json()) as {
         events: { id: string; name: string; year: number }[];
       }).events;
-      setEvents(loaded);
       if (loaded.length === 0) {
         setState('none');
         return;
       }
-      const activeEvent = event ?? loaded[0]?.id ?? '';
-      setEventId(activeEvent);
+      const activeEvent = event ?? eventId;
+      if (activeEvent === '') return;
 
       const roundsResponse = await fetch(`${apiUrl}/api/events/${activeEvent}/rounds`, {
         credentials: 'include',
@@ -143,7 +142,7 @@ export default function TeeTimesPage() {
       if (activeRound !== '') await loadSheet(activeRound);
       setState('ready');
     },
-    [loadSheet],
+    [loadSheet, eventId],
   );
 
   useEffect(() => {
@@ -326,23 +325,6 @@ export default function TeeTimesPage() {
       </p>
 
       <div className="card" style={{ marginBottom: '1rem' }}>
-        <div className="field">
-          <label htmlFor="event">Event</label>
-          <select
-            id="event"
-            value={eventId}
-            onChange={(changed) => {
-              setState('loading');
-              void load(changed.target.value);
-            }}
-          >
-            {events.map((event) => (
-              <option key={event.id} value={event.id}>
-                {event.name} ({event.year})
-              </option>
-            ))}
-          </select>
-        </div>
         {rosterSize === 0 && (
           <p className="check fail">
             Nobody is on this event&apos;s roster, so there is nobody to group. Add players on

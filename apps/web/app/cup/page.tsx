@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { apiUrl } from '../../lib/auth-client';
+import { useCurrentEvent } from '../../lib/current-event';
 
 interface CupPlayer {
   personId: string;
@@ -53,8 +54,7 @@ const FORMAT_LABEL: Record<string, string> = {
 };
 
 export default function CupPage() {
-  const [events, setEvents] = useState<{ id: string; name: string; year: number }[]>([]);
-  const [eventId, setEventId] = useState('');
+  const { eventId } = useCurrentEvent();
   const [cup, setCup] = useState<Cup | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'signed-out' | 'none' | 'no-cup'>('loading');
   const [message, setMessage] = useState('');
@@ -70,13 +70,12 @@ export default function CupPage() {
     const loaded = ((await eventsResponse.json()) as {
       events: { id: string; name: string; year: number }[];
     }).events;
-    setEvents(loaded);
     if (loaded.length === 0) {
       setState('none');
       return;
     }
-    const active = id ?? loaded[0]?.id ?? '';
-    setEventId(active);
+    const active = id ?? eventId;
+    if (active === '') return;
 
     const response = await fetch(`${apiUrl}/api/events/${active}/cup`, { credentials: 'include' });
     if (!response.ok) {
@@ -87,7 +86,7 @@ export default function CupPage() {
     setCup(body);
     setNames(Object.fromEntries(body.teams.map((team) => [team.id, team.name])));
     setState('ready');
-  }, []);
+  }, [eventId]);
 
   useEffect(() => {
     void load();
@@ -185,23 +184,6 @@ export default function CupPage() {
       </p>
 
       <div className="card" style={{ marginBottom: '1rem' }}>
-        <div className="field">
-          <label htmlFor="event">Event</label>
-          <select
-            id="event"
-            value={eventId}
-            onChange={(changed) => {
-              setState('loading');
-              void load(changed.target.value);
-            }}
-          >
-            {events.map((event) => (
-              <option key={event.id} value={event.id}>
-                {event.name} ({event.year})
-              </option>
-            ))}
-          </select>
-        </div>
         {message !== '' && <p className="ok">{message}</p>}
         {/*
           * These are facts about a roster that is usually half-built, not faults. Shown in
