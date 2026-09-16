@@ -96,6 +96,8 @@ const DELETABLE = [
   'cup_team_members',
   'event_cost_items',
   'event_payments',
+  // Editing a round rewrites what it feeds, and that means removing the old rows.
+  'round_competitions',
 ];
 
 const pool = new Pool({ connectionString: url });

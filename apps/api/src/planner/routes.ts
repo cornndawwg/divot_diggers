@@ -1567,9 +1567,15 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
         tee_set_id: string | null;
         course_name: string | null;
         tee_set_name: string | null;
+        played_on: string | null;
+        is_practice: boolean;
+        course_id: string | null;
       }>(
         `SELECT r.id, r.name, r.key, r.status, r.hole_selection, r.tee_set_id,
-                c.name AS course_name, t.name AS tee_set_name
+                c.name AS course_name, t.name AS tee_set_name,
+                r.course_id, r.is_practice,
+                -- A day, not an instant: a timestamp lets a timezone move the round.
+                to_char(r.played_on, 'YYYY-MM-DD') AS played_on
            FROM rounds r
            LEFT JOIN courses c ON c.id = r.course_id
            LEFT JOIN tee_sets t ON t.id = r.tee_set_id
@@ -1584,6 +1590,9 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
         return {
           id: found.id,
           name: found.name,
+          playedOn: found.played_on,
+          isPractice: found.is_practice,
+          courseId: found.course_id,
           key: found.key,
           status: found.status,
           course: found.course_name,
@@ -1597,6 +1606,9 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
       return {
         id: found.id,
         name: found.name,
+        playedOn: found.played_on,
+        isPractice: found.is_practice,
+        courseId: found.course_id,
         key: found.key,
         status: found.status,
         course: found.course_name,
@@ -2629,6 +2641,200 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
       );
     }
     return c.json(result.value);
+  });
+
+  /**
+   * Change a round after it exists.
+   *
+   * A round was write-once: a typo in the name, the wrong course picked from a dropdown, a
+   * date a day out — all permanent. That is not a reasonable thing to ask of anybody.
+   *
+   * What can change depends on whether anybody has been scored in it. A name or a date is
+   * always safe. The course, the tee set and the hole selection are not: pars and stroke
+   * indexes are what turn strokes into points, so changing them under a card that has
+   * already been scored silently rewrites what somebody shot. Same for whether it counts at
+   * all. Those are refused once a card exists, with the reason, rather than quietly allowed.
+   */
+  app.post('/api/rounds/:id', async (c) => {
+    const roundId = c.req.param('id');
+    const body = (await c.req.json().catch(() => ({}))) as {
+      name?: unknown;
+      playedOn?: unknown;
+      courseId?: unknown;
+      teeSetId?: unknown;
+      holeSelection?: unknown;
+      isPractice?: unknown;
+      key?: unknown;
+    };
+
+    const name = typeof body.name === 'string' ? body.name.trim() : null;
+    if (name === '') return c.json({ error: 'A round needs a name.' }, 400);
+
+    const playedOn =
+      typeof body.playedOn === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.playedOn)
+        ? body.playedOn
+        : null;
+    const clearDate = body.playedOn === null;
+
+    const courseId = typeof body.courseId === 'string' && body.courseId !== '' ? body.courseId : null;
+    const teeSetId = typeof body.teeSetId === 'string' && body.teeSetId !== '' ? body.teeSetId : null;
+    const wantsPractice = typeof body.isPractice === 'boolean' ? body.isPractice : null;
+    const key = typeof body.key === 'string' && body.key.trim() !== '' ? body.key.trim() : null;
+
+    let holeSelection: ReturnType<typeof holeSelectionSchema.parse> | null = null;
+    if (body.holeSelection !== undefined) {
+      const parsed = holeSelectionSchema.safeParse(body.holeSelection);
+      if (!parsed.success) {
+        return c.json(
+          {
+            error: 'That is not a hole selection.',
+            issues: parsed.error.issues.map((issue) => issue.message),
+          },
+          400,
+        );
+      }
+      holeSelection = parsed.data;
+    }
+
+    const touchesScoring =
+      courseId !== null || teeSetId !== null || holeSelection !== null ||
+      wantsPractice !== null || key !== null;
+
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const existing = await client.query<{
+        event_id: string;
+        key: string;
+        course_id: string | null;
+        tee_set_id: string | null;
+        is_practice: boolean;
+        scored: number;
+      }>(
+        `SELECT r.event_id, r.key, r.course_id, r.tee_set_id, r.is_practice,
+                (SELECT count(*)::int FROM scorecards s
+                  WHERE s.round_id = r.id AND s.status <> 'not_started') AS scored
+           FROM rounds r WHERE r.id = $1`,
+        [roundId],
+      );
+      const round = existing.rows[0];
+      if (round === undefined) return { kind: 'missing' as const };
+
+      if (touchesScoring && round.scored > 0) {
+        return { kind: 'already-scored' as const, scored: round.scored };
+      }
+
+      // A round that cannot produce a hole list is not a round. Check before writing, so
+      // this is found here rather than on a first tee.
+      const nextTeeSet = teeSetId ?? (courseId !== null ? null : round.tee_set_id);
+      const nextSelection = holeSelection;
+      if (nextTeeSet !== null && nextSelection !== null) {
+        const resolved = await resolveRound(client, nextTeeSet, nextSelection);
+        if (resolved === null) {
+          throw new HoleSelectionError('That tee set has no holes entered yet.');
+        }
+      }
+
+      // Changing the course without naming a tee set leaves the old course's tee set
+      // attached, which would score the round against holes it is not playing.
+      const resolvedTeeSet =
+        teeSetId ??
+        (courseId !== null
+          ? ((
+              await client.query<{ id: string }>(
+                'SELECT id FROM tee_sets WHERE course_id = $1 ORDER BY yardage_total DESC NULLS LAST LIMIT 1',
+                [courseId],
+              )
+            ).rows[0]?.id ?? null)
+          : null);
+
+      const practice = wantsPractice ?? round.is_practice;
+      // A practice round is named something the ruleset does not, so the standings cannot see
+      // it. Turning one back into a counting round has to give it a key that means something.
+      const nextKey = practice
+        ? round.is_practice
+          ? round.key
+          : `practice-${round.key}`
+        : (key ?? (round.is_practice ? null : round.key));
+
+      if (!practice && nextKey === null) {
+        return { kind: 'needs-key' as const };
+      }
+
+      const updated = await client.query(
+        `UPDATE rounds
+            SET name = coalesce($2, name),
+                played_on = CASE WHEN $3::boolean THEN NULL ELSE coalesce($4::date, played_on) END,
+                course_id = coalesce($5, course_id),
+                tee_set_id = coalesce($6, tee_set_id),
+                hole_selection = coalesce($7::jsonb, hole_selection),
+                is_practice = $8,
+                key = $9,
+                updated_at = now()
+          WHERE id = $1`,
+        [
+          roundId,
+          name,
+          clearDate,
+          playedOn,
+          courseId,
+          resolvedTeeSet,
+          holeSelection === null ? null : JSON.stringify(holeSelection),
+          practice,
+          nextKey,
+        ],
+      );
+      if ((updated.rowCount ?? 0) === 0) return { kind: 'not-allowed' as const };
+
+      // What a round feeds follows from its key and whether it counts, so rebuild it rather
+      // than leaving yesterday's answer behind.
+      if (touchesScoring) {
+        await client.query('DELETE FROM round_competitions WHERE round_id = $1', [roundId]);
+        if (!practice) {
+          const ruleset = await rulesetFor(client, round.event_id);
+          for (const competition of ruleset?.competitions ?? []) {
+            const feeds =
+              competition.type === 'team_match_play'
+                ? competition.sessions.some((session) => session.roundId === nextKey)
+                : !(ruleset?.competitions ?? []).some(
+                    (other) =>
+                      other.type === 'team_match_play' &&
+                      other.sessions.some((session) => session.roundId === nextKey),
+                  );
+            if (!feeds) continue;
+            await client.query(
+              `INSERT INTO round_competitions (round_id, competition_key) VALUES ($1,$2)
+               ON CONFLICT DO NOTHING`,
+              [roundId, competition.id],
+            );
+          }
+        }
+      }
+      return { kind: 'saved' as const };
+    });
+
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (result.value.kind === 'missing') return c.json({ error: 'No such round.' }, 404);
+    if (result.value.kind === 'not-allowed') {
+      return c.json({ error: 'You do not have permission to change this round.' }, 403);
+    }
+    if (result.value.kind === 'needs-key') {
+      return c.json(
+        { error: 'Say which round of the rules this is, so it knows what it counts towards.' },
+        400,
+      );
+    }
+    if (result.value.kind === 'already-scored') {
+      return c.json(
+        {
+          error:
+            `${result.value.scored} scorecard${result.value.scored === 1 ? ' has' : 's have'} ` +
+            'been entered for this round, so the course, tees, holes and whether it counts ' +
+            'can no longer change — that would rewrite what people already shot. The name ' +
+            'and the date can still be corrected.',
+        },
+        409,
+      );
+    }
+    return c.json({ saved: true });
   });
 
   app.post('/api/rounds', async (c) => {

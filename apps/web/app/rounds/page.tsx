@@ -139,6 +139,8 @@ export default function RoundsPage() {
                   )}
                 </span>
                 <span style={{ textAlign: 'right', flex: '0 0 auto' }}>
+                  <Link href={`/rounds/${round.id}`} className="meta">Edit</Link>
+                  <br />
                   {round.resolved === null ? (
                     <span className="meta">no holes yet</span>
                   ) : (
