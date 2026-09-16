@@ -376,13 +376,12 @@ describe('the order rounds come back in', () => {
       await harness.request(`/api/events/${eventId}/rounds`, { cookies })
     ).json()) as { rounds: { name: string; playedOn: string | null }[] };
 
-    const lastDated = listed.rounds.findLast((round) => round.playedOn !== null);
     const firstUndated = listed.rounds.findIndex((round) => round.playedOn === null);
-    expect(lastDated).toBeDefined();
+    const lastDated = listed.rounds.map((round) => round.playedOn !== null).lastIndexOf(true);
     expect(firstUndated).toBeGreaterThan(-1);
+    expect(lastDated).toBeGreaterThan(-1);
     // Every undated round sits after every dated one.
-    const lastDatedIndex = listed.rounds.map((r) => r.playedOn !== null).lastIndexOf(true);
-    expect(firstUndated).toBeGreaterThan(lastDatedIndex);
+    expect(firstUndated).toBeGreaterThan(lastDated);
   });
 
   it('breaks a tie on the same day by tee time', async () => {
