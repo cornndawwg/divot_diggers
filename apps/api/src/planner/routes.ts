@@ -2837,6 +2837,53 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
     return c.json({ saved: true });
   });
 
+  /**
+   * Remove a round scheduled by mistake.
+   *
+   * POST rather than DELETE because the console's CORS allows GET and POST only, and a
+   * method the browser refuses to send is a worse answer than a verb that is merely plain.
+   *
+   * A trigger in the database refuses this once anybody has been scored, so the check here
+   * is for the message rather than for the safety.
+   */
+  app.post('/api/rounds/:id/delete', async (c) => {
+    const roundId = c.req.param('id');
+    const result = await asSignedIn(c.req.raw.headers, async (client) => {
+      const existing = await client.query<{ name: string; scored: number }>(
+        `SELECT r.name,
+                (SELECT count(*)::int FROM scorecards s
+                  WHERE s.round_id = r.id AND s.status <> 'not_started') AS scored
+           FROM rounds r WHERE r.id = $1`,
+        [roundId],
+      );
+      const round = existing.rows[0];
+      if (round === undefined) return { kind: 'missing' as const };
+      if (round.scored > 0) return { kind: 'scored' as const, scored: round.scored };
+
+      const removed = await client.query('DELETE FROM rounds WHERE id = $1', [roundId]);
+      if ((removed.rowCount ?? 0) === 0) return { kind: 'not-allowed' as const };
+      return { kind: 'removed' as const, name: round.name };
+    });
+
+    if (result.status === 401) return c.json({ error: 'Not signed in.' }, 401);
+    if (result.value.kind === 'missing') return c.json({ error: 'No such round.' }, 404);
+    if (result.value.kind === 'not-allowed') {
+      return c.json({ error: 'You do not have permission to remove this round.' }, 403);
+    }
+    if (result.value.kind === 'scored') {
+      return c.json(
+        {
+          error:
+            `${result.value.scored} scorecard${result.value.scored === 1 ? ' has' : 's have'} ` +
+            'been entered for this round, so removing it would delete them. Correct the ' +
+            'round instead.',
+        },
+        409,
+      );
+    }
+    return c.json({ removed: true, name: result.value.name });
+  });
+
   app.post('/api/rounds', async (c) => {
     const body = (await c.req.json().catch(() => ({}))) as {
       eventId?: unknown;

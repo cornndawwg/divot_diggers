@@ -56,6 +56,7 @@ export default function EditRoundPage() {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState('');
   const [saved, setSaved] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const load = useCallback(async () => {
     const response = await fetch(`${apiUrl}/api/rounds/${id}`, { credentials: 'include' });
@@ -111,6 +112,22 @@ export default function EditRoundPage() {
     }
     setSaved(true);
     await load();
+  }
+
+  async function remove() {
+    setBusy(true);
+    setProblem('');
+    const response = await fetch(`${apiUrl}/api/rounds/${id}/delete`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    setBusy(false);
+    setConfirming(false);
+    if (!response.ok) {
+      setProblem(((await response.json()) as { error?: string }).error ?? 'Could not remove it.');
+      return;
+    }
+    router.push('/rounds');
   }
 
   if (state === 'loading') return <main className="page"><p>Loading…</p></main>;
@@ -204,6 +221,57 @@ export default function EditRoundPage() {
           {busy ? 'Saving…' : 'Save changes'}
         </button>
       </div>
+
+      <div className="card" style={{ marginTop: '2rem', borderColor: 'var(--danger, #9a2b1e)' }}>
+        <h2 className="section">Remove this round</h2>
+        <p className="hint" style={{ marginTop: 0 }}>
+          Takes its tee sheet with it. Only possible while nobody has been scored in it —
+          after that, correct the round rather than removing it.
+        </p>
+        <button type="button" className="ghost" onClick={() => setConfirming(true)}>
+          Remove this round
+        </button>
+      </div>
+
+      {/*
+        * A confirmation that asks about this round rather than "are you sure", because the
+        * only useful thing a confirmation can do is tell you what you are about to lose.
+        */}
+      {confirming && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="confirm-title"
+          onClick={() => setConfirming(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(12,18,10,0.55)',
+            display: 'grid', placeItems: 'center', padding: '1rem', zIndex: 50,
+          }}
+        >
+          <div
+            className="card"
+            onClick={(event) => event.stopPropagation()}
+            style={{ maxWidth: '26rem', width: '100%' }}
+          >
+            <h2 className="section" id="confirm-title" style={{ marginTop: 0 }}>
+              Remove {round.name}?
+            </h2>
+            <p>
+              This removes the round{round.playedOn === null ? '' : ` on ${round.playedOn}`}
+              {round.course === null ? '' : ` at ${round.course}`}, along with its tee sheet.
+            </p>
+            <p className="hint">This cannot be undone.</p>
+            <div className="row" style={{ marginTop: '1rem' }}>
+              <button type="button" className="ghost" autoFocus onClick={() => setConfirming(false)}>
+                Keep it
+              </button>
+              <button type="button" onClick={() => void remove()} disabled={busy}>
+                {busy ? 'Removing…' : 'Yes, remove it'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

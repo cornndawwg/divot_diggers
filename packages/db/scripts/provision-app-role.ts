@@ -98,6 +98,8 @@ const DELETABLE = [
   'event_payments',
   // Editing a round rewrites what it feeds, and that means removing the old rows.
   'round_competitions',
+  // A round scheduled by mistake. A trigger refuses once anybody has been scored in it.
+  'rounds',
 ];
 
 const pool = new Pool({ connectionString: url });

@@ -239,3 +239,117 @@ describe('ADVERSARIAL: editing is for whoever runs the group', () => {
     expect((await readRound(id)).name).not.toBe('Mine now');
   });
 });
+
+describe('removing a round scheduled by mistake', () => {
+  it('goes, and takes its tee sheet with it', async () => {
+    const id = await makeRound({ name: 'Booked the wrong day' });
+    await post(`/api/rounds/${id}/groups`, { strategy: 'balanced', groupSize: 4 });
+
+    const before = await harness.privilegedPool.query<{ count: string }>(
+      'SELECT count(*) FROM tee_groups WHERE round_id = $1',
+      [id],
+    );
+    expect(Number(before.rows[0]?.count)).toBeGreaterThan(0);
+
+    const response = await post(`/api/rounds/${id}/delete`, {});
+    expect(response.status).toBe(200);
+
+    const rounds = await harness.privilegedPool.query<{ count: string }>(
+      'SELECT count(*) FROM rounds WHERE id = $1',
+      [id],
+    );
+    expect(rounds.rows[0]?.count).toBe('0');
+    const groups = await harness.privilegedPool.query<{ count: string }>(
+      'SELECT count(*) FROM tee_groups WHERE round_id = $1',
+      [id],
+    );
+    expect(groups.rows[0]?.count).toBe('0');
+  });
+
+  it('refuses once somebody has been scored, and says to correct it instead', async () => {
+    const id = await makeRound({ name: 'Actually played' });
+    const players = (await (
+      await harness.request(`/api/events/${eventId}/players`, { cookies })
+    ).json()) as { players: { personId: string }[] };
+    await post(`/api/rounds/${id}/totals`, {
+      totals: [{ personId: players.players[0]?.personId, pointsPulled: 38 }],
+    });
+
+    const response = await post(`/api/rounds/${id}/delete`, {});
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as { error: string }).error).toMatch(/correct the round instead/i);
+
+    const still = await harness.privilegedPool.query<{ count: string }>(
+      'SELECT count(*) FROM rounds WHERE id = $1',
+      [id],
+    );
+    expect(still.rows[0]?.count).toBe('1');
+  });
+
+  it('is refused by the database too, not only by the endpoint', async () => {
+    const id = await makeRound({ name: 'Guarded at the bottom' });
+    const players = (await (
+      await harness.request(`/api/events/${eventId}/players`, { cookies })
+    ).json()) as { players: { personId: string }[] };
+    await post(`/api/rounds/${id}/totals`, {
+      totals: [{ personId: players.players[0]?.personId, pointsPulled: 40 }],
+    });
+
+    // Straight at the table, past every check the API makes.
+    await expect(
+      harness.privilegedPool.query('DELETE FROM rounds WHERE id = $1', [id]),
+    ).rejects.toThrow(/already has scores against it/i);
+  });
+
+  it('still lets the whole event go, scored rounds and all', async () => {
+    // The trap from 0016: a per-row guard that does not consider the cascade above it makes
+    // the parent undeletable.
+    const scratch = '33333333-3333-3333-3333-333333333333';
+    await harness.privilegedPool.query(
+      `INSERT INTO events (id, org_id, name, year, status)
+       SELECT $1, org_id, 'Doomed', 2035, 'draft' FROM events WHERE id = $2`,
+      [scratch, eventId],
+    );
+    const round = await harness.privilegedPool.query<{ id: string }>(
+      `INSERT INTO rounds (event_id, key, name, sequence) VALUES ($1,'thu-am','R',1) RETURNING id`,
+      [scratch],
+    );
+    const player = await harness.privilegedPool.query<{ id: string }>(
+      `INSERT INTO event_players (event_id, person_id, starting_ptp, starting_ptp_source)
+       SELECT $1, person_id, 30, 'manual' FROM event_players WHERE event_id = $2 LIMIT 1
+       RETURNING id`,
+      [scratch, eventId],
+    );
+    await harness.privilegedPool.query(
+      `INSERT INTO scorecards (round_id, event_player_id, status, entry_mode, points_pulled_manual)
+       VALUES ($1,$2,'submitted','totals_only',44)`,
+      [round.rows[0]?.id, player.rows[0]?.id],
+    );
+
+    await harness.privilegedPool.query('DELETE FROM events WHERE id = $1', [scratch]);
+
+    const left = await harness.privilegedPool.query<{ count: string }>(
+      'SELECT count(*) FROM rounds WHERE event_id = $1',
+      [scratch],
+    );
+    expect(left.rows[0]?.count).toBe('0');
+  });
+
+  it('refuses somebody who does not run the group', async () => {
+    const id = await makeRound({ name: 'Not yours to remove' });
+    const theirs = cookiesFrom(
+      await harness.request('/api/auth/sign-in/email', {
+        method: 'POST',
+        body: JSON.stringify({ email: 'outsider@example.com', password: PASSWORD }),
+      }),
+    );
+    const response = await post(`/api/rounds/${id}/delete`, {}, theirs);
+    expect(response.status).toBeGreaterThanOrEqual(400);
+
+    const still = await harness.privilegedPool.query<{ count: string }>(
+      'SELECT count(*) FROM rounds WHERE id = $1',
+      [id],
+    );
+    expect(still.rows[0]?.count).toBe('1');
+  });
+});

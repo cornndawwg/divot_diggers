@@ -145,7 +145,7 @@ describe('the guarantees the migrations carry', () => {
     expect(rows[0]?.count).toBe('0');
   });
 
-  it('carries 75 policies, and accounts for every one', async () => {
+  it('carries 76 policies, and accounts for every one', async () => {
     const { rows } = await pool.query<{ count: string }>(
       "SELECT count(*) FROM pg_policies WHERE schemaname = 'public'",
     );
@@ -161,7 +161,8 @@ describe('the guarantees the migrations carry', () => {
     //   0013  cup teams, their membership and sessions, so the planner can set the cup up
     //   0018  read and write for group invitations, admins only
     //   0020  the cost breakdown players read, and who has settled up
-    expect(rows[0]?.count).toBe('75');
+    //   0022  delete on rounds, which had select, insert and update and no delete
+    expect(rows[0]?.count).toBe('76');
   });
 
   it('protects a scored player from being deleted', async () => {
