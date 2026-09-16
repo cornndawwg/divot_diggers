@@ -31,6 +31,24 @@ interface Round {
   feedsNothing: boolean;
   holeSelection: { mode: string };
   resolved: Resolved | null;
+  playedOn: string | null;
+  firstTee: string | null;
+  lastTee: string | null;
+  groups: number;
+  locked: number;
+  scored: number;
+}
+
+/** "Thursday 12 August", or a note that nobody has said yet. */
+function describeDay(iso: string | null): string {
+  if (iso === null) return 'Day not set';
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(Date.UTC(y ?? 2000, (m ?? 1) - 1, d ?? 1)).toLocaleDateString(undefined, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'UTC',
+  });
 }
 
 const SELECTION_LABEL: Record<string, string> = {
@@ -62,16 +80,18 @@ export default function RoundsPage() {
       setState('signed-out');
       return;
     }
-    const ids: string[] = [];
+    let listed: Round[] = [];
     if (detail.ok) {
-      const rows = (await detail.json()) as { rounds: { id: string }[] };
-      ids.push(...rows.rounds.map((round) => round.id));
+      listed = ((await detail.json()) as { rounds: Round[] }).rounds;
     }
 
     const loaded = await Promise.all(
-      ids.map(async (id) => {
-        const response = await fetch(`${apiUrl}/api/rounds/${id}`, { credentials: 'include' });
-        return response.ok ? ((await response.json()) as Round) : null;
+      listed.map(async (row) => {
+        const response = await fetch(`${apiUrl}/api/rounds/${row.id}`, { credentials: 'include' });
+        if (!response.ok) return null;
+        // The list knows when it is played and who is out when; the detail knows the holes
+        // and the par. Neither knows both.
+        return { ...(await response.json()), ...row } as Round;
       }),
     );
     setRounds(loaded.filter((round): round is Round => round !== null));
@@ -111,8 +131,24 @@ export default function RoundsPage() {
           </p>
         ) : (
           <ul className="list">
-            {rounds.map((round) => (
+            {rounds.map((round, index) => (
               <li key={round.id}>
+                {/*
+                  * A heading each time the day changes. The API returns them in the order
+                  * the trip happens, so this needs no sorting of its own.
+                  */}
+                {(index === 0 || rounds[index - 1]?.playedOn !== round.playedOn) && (
+                  <span
+                    style={{
+                      flexBasis: '100%',
+                      fontWeight: 700,
+                      marginTop: index === 0 ? 0 : '0.9rem',
+                      marginBottom: '0.2rem',
+                    }}
+                  >
+                    {describeDay(round.playedOn)}
+                  </span>
+                )}
                 <span>
                   {round.name}
                   {round.isPractice && (
@@ -120,9 +156,31 @@ export default function RoundsPage() {
                   )}
                   <br />
                   <span className="meta">
+                    {round.firstTee !== null && (
+                      <>
+                        {round.firstTee}
+                        {round.lastTee !== null && round.lastTee !== round.firstTee
+                          ? `–${round.lastTee}`
+                          : ''}
+                        {' · '}
+                      </>
+                    )}
                     {round.course ?? 'No course'}
                     {round.teeSet !== null ? ` · ${round.teeSet}` : ''} ·{' '}
                     {SELECTION_LABEL[round.holeSelection.mode] ?? round.holeSelection.mode}
+                  </span>
+                  <br />
+                  <span className="meta">
+                    {round.groups === 0
+                      ? 'No tee sheet yet'
+                      : `${round.groups} ${round.groups === 1 ? 'group' : 'groups'}${
+                          round.locked > 0 ? ', locked' : ''
+                        }`}
+                    {round.scored > 0
+                      ? ` · ${round.scored} scored`
+                      : round.isPractice
+                        ? ''
+                        : ' · nobody scored yet'}
                   </span>
                   {/*
                     * A round feeding nothing and not marked practice is misconfigured, which

@@ -353,3 +353,61 @@ describe('removing a round scheduled by mistake', () => {
     expect(still.rows[0]?.count).toBe('1');
   });
 });
+
+describe('the order rounds come back in', () => {
+  it('is the order the trip happens, not the order they were typed', async () => {
+    const saturday = await makeRound({ name: 'Saturday', playedOn: '2027-08-14' });
+    const thursday = await makeRound({ name: 'Thursday', playedOn: '2027-08-12' });
+    const friday = await makeRound({ name: 'Friday', playedOn: '2027-08-13' });
+
+    const listed = (await (
+      await harness.request(`/api/events/${eventId}/rounds`, { cookies })
+    ).json()) as { rounds: { id: string; name: string; playedOn: string | null }[] };
+
+    const days = listed.rounds
+      .filter((round) => [saturday, thursday, friday].includes(round.id))
+      .map((round) => round.name);
+    expect(days).toEqual(['Thursday', 'Friday', 'Saturday']);
+  });
+
+  it('puts a round with no day at the end, where it reads as still to arrange', async () => {
+    await makeRound({ name: 'Somewhere in the week' });
+    const listed = (await (
+      await harness.request(`/api/events/${eventId}/rounds`, { cookies })
+    ).json()) as { rounds: { name: string; playedOn: string | null }[] };
+
+    const lastDated = listed.rounds.findLast((round) => round.playedOn !== null);
+    const firstUndated = listed.rounds.findIndex((round) => round.playedOn === null);
+    expect(lastDated).toBeDefined();
+    expect(firstUndated).toBeGreaterThan(-1);
+    // Every undated round sits after every dated one.
+    const lastDatedIndex = listed.rounds.map((r) => r.playedOn !== null).lastIndexOf(true);
+    expect(firstUndated).toBeGreaterThan(lastDatedIndex);
+  });
+
+  it('breaks a tie on the same day by tee time', async () => {
+    const afternoon = await makeRound({ name: 'Cup, afternoon', playedOn: '2027-08-15' });
+    const morning = await makeRound({ name: 'Dogfight, morning', playedOn: '2027-08-15' });
+
+    await post(`/api/rounds/${afternoon}/groups`, { firstTeeTime: '13:30', groupSize: 4 });
+    await post(`/api/rounds/${morning}/groups`, { firstTeeTime: '08:10', groupSize: 4 });
+
+    const listed = (await (
+      await harness.request(`/api/events/${eventId}/rounds`, { cookies })
+    ).json()) as { rounds: { id: string; name: string; firstTee: string | null }[] };
+
+    const sameDay = listed.rounds.filter((round) => [afternoon, morning].includes(round.id));
+    expect(sameDay.map((round) => round.name)).toEqual(['Dogfight, morning', 'Cup, afternoon']);
+    expect(sameDay[0]?.firstTee).toBe('08:10');
+  });
+
+  it('reports the spread of tee times, so a day reads at a glance', async () => {
+    const listed = (await (
+      await harness.request(`/api/events/${eventId}/rounds`, { cookies })
+    ).json()) as { rounds: { name: string; firstTee: string | null; lastTee: string | null }[] };
+
+    const morning = listed.rounds.find((round) => round.name === 'Dogfight, morning');
+    expect(morning?.firstTee).toBe('08:10');
+    expect(morning?.lastTee).not.toBeNull();
+  });
+});

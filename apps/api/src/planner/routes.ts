@@ -1506,6 +1506,8 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
         scored: number;
         is_practice: boolean;
         feeds: number;
+        first_tee: string | null;
+        last_tee: string | null;
       }>(
         `SELECT r.id, r.key, r.name, r.sequence, r.status, r.hole_selection, r.is_practice,
                 (SELECT count(*)::int FROM round_competitions rc WHERE rc.round_id = r.id) AS feeds,
@@ -1517,12 +1519,22 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
                 (SELECT count(*)::int FROM tee_groups g
                   WHERE g.round_id = r.id AND g.locked_at IS NOT NULL) AS locked,
                 (SELECT count(*)::int FROM scorecards s
-                  WHERE s.round_id = r.id AND s.status <> 'not_started') AS scored
+                  WHERE s.round_id = r.id AND s.status <> 'not_started') AS scored,
+                (SELECT to_char(min(g.tee_time), 'HH24:MI') FROM tee_groups g
+                  WHERE g.round_id = r.id) AS first_tee,
+                (SELECT to_char(max(g.tee_time), 'HH24:MI') FROM tee_groups g
+                  WHERE g.round_id = r.id) AS last_tee
            FROM rounds r
            LEFT JOIN courses c ON c.id = r.course_id
            LEFT JOIN tee_sets t ON t.id = r.tee_set_id
           WHERE r.event_id = $1
-          ORDER BY r.sequence`,
+          -- The order a trip happens in, not the order somebody typed them. A round with no
+          -- day yet sorts to the end, where it reads as "still to arrange" rather than as
+          -- the first thing on Thursday.
+          ORDER BY r.played_on ASC NULLS LAST,
+                   (SELECT min(g.tee_time) FROM tee_groups g WHERE g.round_id = r.id)
+                     ASC NULLS LAST,
+                   r.sequence`,
         [eventId],
       );
 
@@ -1540,6 +1552,8 @@ export function plannerRoutes(deps: PlannerDeps): Hono {
           holeCount:
             custom !== undefined && custom > 0 ? custom : mode === 'all' ? null : 9,
           isPractice: row.is_practice,
+          firstTee: row.first_tee,
+          lastTee: row.last_tee,
           // A round that feeds nothing and is not marked practice is misconfigured, and that
           // has happened. Reporting both lets the screen tell them apart.
           feedsNothing: !row.is_practice && row.feeds === 0,
