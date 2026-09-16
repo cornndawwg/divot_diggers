@@ -35,7 +35,8 @@
     "start:api": "pnpm --filter @ddga/api start",
     "release": "pnpm db:migrate && pnpm db:provision-role",
     "dev:mobile": "pnpm --filter @ddga/mobile start",
-    "dev:mobile:tunnel": "bash scripts/dev-mobile-tunnel.sh"
+    "dev:mobile:tunnel": "bash scripts/dev-mobile-tunnel.sh",
+    "verify": "pnpm typecheck && pnpm test && pnpm db:verify-schema"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",

@@ -90,6 +90,11 @@ docs/                     Specs. Read before implementing a subsystem.
   invitation to improvise.
 - **When you finish a task, state the verification command and the expected result** so it can be
   checked without reading code.
+- **Run `pnpm verify` before committing, and read what it says.** It runs typecheck, then the
+  suite, then the schema check, stopping at the first failure. Vitest strips types rather than
+  checking them, so a green suite is no evidence the types are sound — a commit went out on
+  2026-09-16 with two type errors for exactly that reason. Never reduce the output of a check
+  to a count; the errors are the part worth reading.
 
 ## Domain glossary
 
